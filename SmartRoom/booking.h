@@ -24,12 +24,14 @@ typedef enum {
 // ── Single booking slot ───────────────────────────────────────────────────────
 // bookingId is 40 chars to hold a full UUID (36 chars + null terminator + margin)
 struct BookingSlot {
-  char     bookingId[40];     // UUID from cloud backend e.g. "aaba834a-51ed-46c7-9512-60d5f696cff2"
-  char     occupantName[32];  // Display name of person who booked
-  time_t   startTime;         // Unix timestamp
-  time_t   endTime;           // Unix timestamp
-  FSMState state;
-  bool     active;            // False = slot can be overwritten
+  char          bookingId[40];     // UUID from cloud backend e.g. "aaba834a-51ed-46c7-9512-60d5f696cff2"
+  char          occupantName[32];  // Display name of person who booked
+  time_t        startTime;         // Unix timestamp
+  time_t        endTime;           // Unix timestamp
+  FSMState      state;
+  bool          active;            // False = slot can be overwritten
+  unsigned long pendingStartMs;    // Per-slot grace-period anchor (millis at PENDING entry)
+  bool          buzzerFired;       // Per-slot 5-min warning latch
 };
 
 // ── Outbound event (for store-and-forward queue) ──────────────────────────────

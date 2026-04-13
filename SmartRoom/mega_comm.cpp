@@ -132,3 +132,18 @@ void megaSendOfflineWarning(bool show) {
   snprintf(buf, sizeof(buf), "{\"cmd\":\"OFFLINE\",\"show\":%d}\n", show ? 1 : 0);
   MegaSerial.print(buf);
 }
+
+// FIX (#6): Push a short text message to the Mega. Used for walk-up booking
+// rejection feedback so the user understands why nothing happened.
+void megaSendMessage(const char* text) {
+  char escaped[96];
+  uint8_t j = 0;
+  for (uint8_t i = 0; text[i] && j < sizeof(escaped) - 2; i++) {
+    if (text[i] == '"' || text[i] == '\\') escaped[j++] = '\\';
+    escaped[j++] = text[i];
+  }
+  escaped[j] = '\0';
+  char buf[160];
+  snprintf(buf, sizeof(buf), "{\"cmd\":\"MSG\",\"text\":\"%s\"}\n", escaped);
+  MegaSerial.print(buf);
+}

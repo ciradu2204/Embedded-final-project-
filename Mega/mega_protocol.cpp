@@ -10,6 +10,26 @@ static RoomDisplayData currentData;
 static CalendarSlot calSlots[MAX_CAL_SLOTS];
 static uint8_t      calSlotCount = 0;
 
+// FIX: Visible top hour in the calendar viewport. Persists across re-renders
+// so that swipe/arrow scrolling sticks while CALSLOT data trickles in.
+static uint8_t      calTopHour    = CAL_DAY_START_HOUR;
+
+// Helper: redraw calendar with current slot buffer at current scroll offset
+static void redrawCalendar(UTFT* lcd) {
+  displayCalendarScreen(lcd, calTopHour);
+  displayCalendarBookings(lcd, calSlots, calSlotCount, calTopHour);
+}
+
+static void scrollCalendar(UTFT* lcd, int delta) {
+  int next = (int)calTopHour + delta;
+  int maxTop = CAL_DAY_END_HOUR - CAL_VISIBLE_ROWS + 1;
+  if (next < CAL_DAY_START_HOUR) next = CAL_DAY_START_HOUR;
+  if (next > maxTop)             next = maxTop;
+  if ((uint8_t)next == calTopHour) return;
+  calTopHour = (uint8_t)next;
+  redrawCalendar(lcd);
+}
+
 // ── Non-blocking character-by-character UART reader ──────────────────────────
 // FIX: Replaces readStringUntil() which blocks for 1 second on incomplete packets.
 static char    _rxBuf[300];
@@ -91,12 +111,13 @@ void handleIncomingCommand(UTFT* lcd) {
     displayStatusScreen(lcd, &currentData);
 
   } else if (strcmp(cmd, "CALENDAR") == 0) {
-    // Reset calendar slot buffer
+    // Reset calendar slot buffer + reset scroll to top of day
     memset(calSlots, 0, sizeof(calSlots));
     currentScreen = 1;
     reportScreen(1);
-    calSlotCount = 0; // <--- ADDED: Clears old slots before drawing new ones
-    displayCalendarScreen(lcd);
+    calSlotCount = 0;
+    calTopHour   = CAL_DAY_START_HOUR;
+    displayCalendarScreen(lcd, calTopHour);
 
   } else if (strcmp(cmd, "CALSLOT") == 0) {
     // Receive one booking slot for the calendar
@@ -113,8 +134,14 @@ void handleIncomingCommand(UTFT* lcd) {
   } else if (strcmp(cmd, "CALDONE") == 0) {
     // All CALSLOT packets received — draw the bookings on the calendar
     if (currentScreen == 1) {
-      displayCalendarBookings(lcd, calSlots, calSlotCount);
+      displayCalendarBookings(lcd, calSlots, calSlotCount, calTopHour);
     }
+
+  } else if (strcmp(cmd, "MSG") == 0) {
+    // FIX (#6): toast-style transient text message
+    char text[64] = {0};
+    extractStr(buf, "text", text, sizeof(text));
+    displayMessage(lcd, text);
 
   } else if (strcmp(cmd, "BOOKNOW") == 0) {
     currentScreen = 2;
@@ -141,6 +168,13 @@ void handleIncomingCommand(UTFT* lcd) {
 }
 
 // ── Touch event sender ────────────────────────────────────────────────────────
+// NOTE: This uses the static `lcd` pointer captured by handleIncomingCommand —
+// we rely on the calendar arrow/swipe handlers running locally on the Mega so
+// scrolling stays snappy without an ESP32 round-trip. The lcd pointer is
+// passed in via setRenderTarget() below.
+static UTFT* _lcdPtr = nullptr;
+void megaProtocolSetLcd(UTFT* lcd) { _lcdPtr = lcd; }
+
 void sendTouchEvent(TouchPoint tp) {
   static bool wasDown = false;
   static uint16_t downX = 0, downY = 0;
@@ -156,7 +190,7 @@ void sendTouchEvent(TouchPoint tp) {
     }
   } else if (!tp.touched && wasDown) {
     wasDown = false;
-    
+
     // FIX: Use lastX and lastY to calculate the gesture, not tp.x (which is 0)
     char gesture = detectGesture(downX, downY, lastX, lastY);
 
@@ -180,7 +214,29 @@ void sendTouchEvent(TouchPoint tp) {
           Serial2.print("{\"evt\":\"TOUCH\",\"gesture\":\"BOOKNOW\"}\n");
         }
       }
-    } 
+    }
+    else if (currentScreen == 1) {
+      // Calendar screen: vertical scrolling stays local for snappiness.
+      if (_lcdPtr) {
+        if (gesture == GESTURE_SWIPE_UP) {
+          // Finger swiped up -> show later hours
+          scrollCalendar(_lcdPtr, +CAL_VISIBLE_ROWS / 2);
+        } else if (gesture == GESTURE_SWIPE_DOWN) {
+          scrollCalendar(_lcdPtr, -CAL_VISIBLE_ROWS / 2);
+        } else if (gesture == GESTURE_TAP) {
+          // Up arrow tap target
+          if (downX >= 740 && downX <= 790 &&
+              downY >= 65  && downY <= 90) {
+            scrollCalendar(_lcdPtr, -1);
+          }
+          // Down arrow tap target
+          else if (downX >= 740 && downX <= 790 &&
+                   downY >= 442 && downY <= 475) {
+            scrollCalendar(_lcdPtr, +1);
+          }
+        }
+      }
+    }
     else if (currentScreen == 2) {
       if (gesture == GESTURE_TAP) {
         int dur = 0;

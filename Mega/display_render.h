@@ -13,6 +13,13 @@
 // Max calendar slots to display
 #define MAX_CAL_SLOTS  10
 
+// ── Calendar viewport ──────────────────────────────────────────────────────────
+// Day spans 07:00 – 22:00 (15 hours). 8 hour rows are visible at a time and the
+// view scrolls vertically with up/down swipes (or the on-screen arrows).
+#define CAL_DAY_START_HOUR  7
+#define CAL_DAY_END_HOUR    22
+#define CAL_VISIBLE_ROWS    8
+
 struct CalendarSlot {
   uint32_t startSecs;   // Unix timestamp
   uint32_t endSecs;
@@ -33,11 +40,18 @@ struct RoomDisplayData {
 
 void displayStartup(UTFT* lcd);
 void displayStatusScreen(UTFT* lcd, RoomDisplayData* d);
-void displayCalendarScreen(UTFT* lcd);
-void displayCalendarBookings(UTFT* lcd, CalendarSlot* slots, uint8_t count);
+
+// Calendar grid: drawn once when the user opens the calendar screen.
+// `topHour` is the first hour shown at the top of the visible window.
+void displayCalendarScreen(UTFT* lcd, uint8_t topHour);
+void displayCalendarBookings(UTFT* lcd, CalendarSlot* slots, uint8_t count, uint8_t topHour);
+
 void displayBookNowScreen(UTFT* lcd);
 void displayConfirmation(UTFT* lcd, bool success);
 void displayOfflineWarning(UTFT* lcd, bool show);
+
+// FIX (#6): toast-style transient message overlay (used for walk-up rejection).
+void displayMessage(UTFT* lcd, const char* text);
 
 uint16_t    stateColour(uint8_t state);
 const char* stateLabel(uint8_t state);

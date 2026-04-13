@@ -200,14 +200,91 @@ void resetStatusScreenCache() {
 }
 
 // ── Calendar ──────────────────────────────────────────────────────────────────
-void displayCalendarScreen(UTFT* lcd) {
+//
+// Day spans CAL_DAY_START_HOUR .. CAL_DAY_END_HOUR. Only CAL_VISIBLE_ROWS
+// hours are visible at a time; the rest are reached by swiping up/down or
+// tapping the on-screen arrows.
+//
+// Layout:
+//   y= 0..60   header
+//   y=65..90   day-of-week strip
+//   y=95..471  hour grid (CAL_VISIBLE_ROWS rows of 47px each)
+//   y=435..480 footer / scroll arrows
+//
+// The visible "top hour" is provided by the protocol layer so it survives
+// re-renders when calendar slot data arrives later.
+
+#define CAL_GRID_TOP_Y     95
+#define CAL_ROW_HEIGHT     47
+#define CAL_GRID_BOTTOM_Y  (CAL_GRID_TOP_Y + CAL_VISIBLE_ROWS * CAL_ROW_HEIGHT)
+
+// Up/down arrow tap targets (right edge of header strip, easy to reach)
+#define CAL_ARROW_X       740
+#define CAL_ARROW_W        50
+#define CAL_ARROW_UP_Y     65
+#define CAL_ARROW_UP_H     25
+#define CAL_ARROW_DN_Y    440
+#define CAL_ARROW_DN_H     35
+
+static void drawCalendarHourGrid(UTFT* lcd, uint8_t topHour) {
+  lcd->setBackColor(COL_BG);
+  int colW = SCR_W / 7;
+  for (int row = 0; row < CAL_VISIBLE_ROWS; row++) {
+    int y = CAL_GRID_TOP_Y + row * CAL_ROW_HEIGHT;
+    lcd->setColor(40, 40, 40);
+    lcd->drawLine(0, y, SCR_W, y);
+    int hr = topHour + row;
+    if (hr > CAL_DAY_END_HOUR) break;
+    char hbuf[8] = "";
+    if (hr < 10) strcat(hbuf, "0");
+    char tmp[4]; itoa(hr, tmp, 10); strcat(hbuf, tmp);
+    strcat(hbuf, ":00");
+    lcd->setColor(COL_GRAY);
+    lcd->print(hbuf, 2, y + 4);
+  }
+  // Faint vertical separators between weekday columns
+  for (int i = 1; i < 7; i++) {
+    lcd->setColor(30, 30, 30);
+    lcd->drawLine(i * colW, CAL_GRID_TOP_Y, i * colW, CAL_GRID_BOTTOM_Y);
+  }
+}
+
+static void drawCalendarArrows(UTFT* lcd, uint8_t topHour) {
+  bool canUp   = (topHour > CAL_DAY_START_HOUR);
+  bool canDown = (topHour + CAL_VISIBLE_ROWS - 1 < CAL_DAY_END_HOUR);
+
+  // Up arrow button
+  if (canUp) drawPanel(lcd, CAL_ARROW_X, CAL_ARROW_UP_Y, CAL_ARROW_W, CAL_ARROW_UP_H, 0, 100, 200);
+  else       drawPanel(lcd, CAL_ARROW_X, CAL_ARROW_UP_Y, CAL_ARROW_W, CAL_ARROW_UP_H, 50, 50, 60);
+  lcd->setBackColor(canUp ? 0 : 50, canUp ? 100 : 50, canUp ? 200 : 60);
+  lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
+  lcd->print("^", CAL_ARROW_X + 18, CAL_ARROW_UP_Y + 4);
+
+  // Down arrow button — sits in the footer band
+  drawPanel(lcd, 0, CAL_ARROW_DN_Y, SCR_W, CAL_ARROW_DN_H, COL_BG);
+  if (canDown) drawPanel(lcd, CAL_ARROW_X, CAL_ARROW_DN_Y + 2, CAL_ARROW_W, CAL_ARROW_DN_H - 4, 0, 100, 200);
+  else         drawPanel(lcd, CAL_ARROW_X, CAL_ARROW_DN_Y + 2, CAL_ARROW_W, CAL_ARROW_DN_H - 4, 50, 50, 60);
+  lcd->setBackColor(canDown ? 0 : 50, canDown ? 100 : 50, canDown ? 200 : 60);
+  lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
+  lcd->print("v", CAL_ARROW_X + 18, CAL_ARROW_DN_Y + 8);
+
+  // Range hint at bottom-left
+  lcd->setBackColor(COL_BG); lcd->setColor(COL_GRAY); lcd->setFont(SmallFont);
+  char range[24];
+  uint8_t bottomHour = topHour + CAL_VISIBLE_ROWS - 1;
+  if (bottomHour > CAL_DAY_END_HOUR) bottomHour = CAL_DAY_END_HOUR;
+  snprintf(range, sizeof(range), "%02u:00 - %02u:00  (swipe)", topHour, bottomHour + 1);
+  lcd->print(range, 10, CAL_ARROW_DN_Y + 12);
+}
+
+void displayCalendarScreen(UTFT* lcd, uint8_t topHour) {
   lcd->clrScr();
   lcd->setBackColor(COL_BG);
   drawPanel(lcd, 0, 0, SCR_W, 60, COL_NAVY);
   lcd->setColor(COL_WHITE); lcd->setBackColor(COL_NAVY);
   lcd->setFont(BigFont); lcdPrint(lcd, "This Week", 20, 15);
   lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
-  lcdPrint(lcd, "Swipe right to go back", 530, 38);
+  lcdPrint(lcd, "Swipe right to go back", 500, 38);
 
   char days[7][4] = {"Mon","Tue","Wed","Thu","Fri","Sat","Sun"};
   int colW = SCR_W / 7;
@@ -217,42 +294,30 @@ void displayCalendarScreen(UTFT* lcd) {
     lcd->setFont(SmallFont);
     lcd->print(days[i], i * colW + 8, 70);
   }
-  lcd->setBackColor(COL_BG);
-  for (int row = 0; row < 8; row++) {
-    int y = 95 + row * 47;
-    lcd->setColor(40, 40, 40);
-    lcd->drawLine(0, y, SCR_W, y);
-    char hbuf[8] = "";
-    int hr = 8 + row;
-    if (hr < 10) strcat(hbuf, "0");
-    char tmp[4]; itoa(hr, tmp, 10); strcat(hbuf, tmp);
-    strcat(hbuf, ":00");
-    lcd->setColor(COL_GRAY);
-    lcd->print(hbuf, 2, y + 4);
-  }
-  lcd->setColor(COL_GRAY); lcd->setFont(SmallFont);
-  lcdPrint(lcd, "Loading bookings...", CENTER, 440);
+  drawCalendarHourGrid(lcd, topHour);
+  drawCalendarArrows(lcd, topHour);
+
+  lcd->setBackColor(COL_BG); lcd->setColor(COL_GRAY); lcd->setFont(SmallFont);
+  lcdPrint(lcd, "Loading bookings...", CENTER, CAL_ARROW_DN_Y + 12);
 }
 
-void displayCalendarBookings(UTFT* lcd, CalendarSlot* slots, uint8_t count) {
-  drawPanel(lcd, 0, 95, SCR_W, 370, COL_BG);
-  lcd->setBackColor(COL_BG);
+void displayCalendarBookings(UTFT* lcd, CalendarSlot* slots, uint8_t count, uint8_t topHour) {
+  // Clear grid area + footer hint, then redraw grid lines
+  drawPanel(lcd, 0, CAL_GRID_TOP_Y, SCR_W, CAL_GRID_BOTTOM_Y - CAL_GRID_TOP_Y, COL_BG);
+  drawCalendarHourGrid(lcd, topHour);
+
   int colW = SCR_W / 7;
-  for (int row = 0; row < 8; row++) {
-    int y = 95 + row * 47;
-    lcd->setColor(40, 40, 40); lcd->drawLine(0, y, SCR_W, y);
-    char hbuf[8] = "";
-    int hr = 8 + row;
-    if (hr < 10) strcat(hbuf, "0");
-    char tmp[4]; itoa(hr, tmp, 10); strcat(hbuf, tmp);
-    strcat(hbuf, ":00");
-    lcd->setColor(COL_GRAY); lcd->print(hbuf, 2, y + 4);
-  }
+
   if (count == 0) {
-    lcd->setColor(COL_GRAY); lcd->setFont(SmallFont);
-    lcdPrint(lcd, "No bookings this week", CENTER, 440);
+    lcd->setBackColor(COL_BG); lcd->setColor(COL_GRAY); lcd->setFont(SmallFont);
+    lcdPrint(lcd, "No bookings this week", CENTER, CAL_ARROW_DN_Y + 12);
+    drawCalendarArrows(lcd, topHour);
     return;
   }
+
+  float topPx    = (float)CAL_GRID_TOP_Y;
+  float bottomPx = (float)CAL_GRID_BOTTOM_Y;
+
   for (uint8_t i = 0; i < count; i++) {
     if (!slots[i].active) continue;
     time_t st = (time_t)slots[i].startSecs;
@@ -265,11 +330,15 @@ void displayCalendarBookings(UTFT* lcd, CalendarSlot* slots, uint8_t count) {
     struct tm* tmE = localtime(&et);
     int endHour = tmE ? tmE->tm_hour : startHour + 1;
     int endMin  = tmE ? tmE->tm_min  : 0;
-    float yStart = 95.0f + (startHour - 8 + startMin / 60.0f) * 47.0f;
-    float yEnd   = 95.0f + (endHour   - 8 + endMin   / 60.0f) * 47.0f;
-    if (yEnd <= 95 || yStart >= 471) continue;
-    if (yStart < 95) yStart = 95;
-    if (yEnd > 471)  yEnd   = 471;
+
+    float yStart = topPx + ((startHour - topHour) + startMin / 60.0f) * CAL_ROW_HEIGHT;
+    float yEnd   = topPx + ((endHour   - topHour) + endMin   / 60.0f) * CAL_ROW_HEIGHT;
+
+    // Clip to visible window
+    if (yEnd <= topPx || yStart >= bottomPx) continue;
+    if (yStart < topPx)    yStart = topPx;
+    if (yEnd   > bottomPx) yEnd   = bottomPx;
+
     int bx = col * colW + 3, bw = colW - 6;
     int by = (int)yStart + 1, bh = (int)(yEnd - yStart) - 2;
     if (bh < 4) bh = 4;
@@ -278,7 +347,7 @@ void displayCalendarBookings(UTFT* lcd, CalendarSlot* slots, uint8_t count) {
     else                                       drawPanel(lcd, bx, by, bw, bh,  20,  80, 160);
     if (bh > 14) {
       lcd->setFont(SmallFont); lcd->setColor(COL_WHITE);
-      uint8_t br = (slots[i].state == STATE_ACTIVE ? 180 : (slots[i].state == STATE_PENDING ? 200 : 20));
+      uint8_t br  = (slots[i].state == STATE_ACTIVE ? 180 : (slots[i].state == STATE_PENDING ? 200 : 20));
       uint8_t bg_ = (slots[i].state == STATE_ACTIVE ? 20  : (slots[i].state == STATE_PENDING ? 120 : 80));
       uint8_t bb  = (slots[i].state == STATE_ACTIVE ? 20  : (slots[i].state == STATE_PENDING ?   0 : 160));
       lcd->setBackColor(br, bg_, bb);
@@ -287,7 +356,21 @@ void displayCalendarBookings(UTFT* lcd, CalendarSlot* slots, uint8_t count) {
       lcd->print(nb, bx + 2, by + 2);
     }
   }
-  drawPanel(lcd, 0, 435, SCR_W, 20, COL_BG);
+  drawCalendarArrows(lcd, topHour);
+}
+
+// ── Toast message overlay ────────────────────────────────────────────────────
+// FIX (#6): Drawn over whatever screen is active. Used by the ESP32 to surface
+// transient feedback like "Room unavailable" after a refused walk-up booking.
+void displayMessage(UTFT* lcd, const char* text) {
+  drawPanel(lcd, 80, 380, 640, 60, 80, 20, 20);
+  lcd->setBackColor(80, 20, 20); lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
+  // Truncate to fit visually (~36 chars at this width)
+  char trimmed[40];
+  strncpy(trimmed, text, sizeof(trimmed) - 1);
+  trimmed[sizeof(trimmed) - 1] = '\0';
+  lcdPrint(lcd, trimmed, CENTER, 398);
+  lcd->setBackColor(COL_BG);
 }
 
 // ── Book Now ──────────────────────────────────────────────────────────────────

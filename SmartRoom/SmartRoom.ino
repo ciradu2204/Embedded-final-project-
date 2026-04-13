@@ -22,6 +22,10 @@ static unsigned long _lastOfflineBlipMs = 0;
 // FIX: Non-blocking confirmation timer replaces blocking delay(3200)
 static unsigned long _confirmClearMs    = 0;
 static bool          _confirmPending    = false;
+// FIX (#3): Non-blocking startup handshake replaces blocking delay(1500).
+static unsigned long _startupTimeMs     = 0;
+static bool          _startupDone       = false;
+static const uint32_t STARTUP_DELAY_MS  = 1500;
 
 static const uint32_t FSM_TICK_INTERVAL_MS     = 1000;
 static const uint32_t DISPLAY_SYNC_INTERVAL_MS = 1000;
@@ -44,10 +48,11 @@ void setup() {
 
   megaCommInit();
 
-  // FIX: Increased delay before STARTUP to give Mega time to finish
-  // touchInit() + InitLCD() which takes ~500ms on the Mega side.
-  delay(1500);
-  megaSendStartup();
+  // FIX (#3): No blocking delay here. The Mega needs ~1.5s to finish
+  // touchInit() + InitLCD(), so we send STARTUP from loop() once that
+  // window has elapsed. The rest of setup() runs in parallel.
+  _startupTimeMs = millis();
+  _startupDone   = false;
 
   eventQueueInit();
   nvsInit();
@@ -81,6 +86,12 @@ void loop() {
   buzzerTick();
   megaCommTick();
 
+  // FIX (#3): Non-blocking startup handshake — fires once, ~1.5s after boot.
+  if (!_startupDone && now - _startupTimeMs >= STARTUP_DELAY_MS) {
+    megaSendStartup();
+    _startupDone = true;
+  }
+
   // FIX: Non-blocking confirmation clear.
   // After booking confirmed, wait CONFIRM_SHOW_MS then return to status screen.
   // This replaces the old blocking delay(3200) that froze the ESP32.
@@ -95,12 +106,14 @@ void loop() {
     Serial.printf("[Touch] %s\n", touch.gesture);
 
     if (strcmp(touch.gesture, "BOOK") == 0 && touch.bookDuration > 0) {
-      if (fsmRoomIsAvailable()) {
-        fsmCreateWalkUpBooking(WALK_UP_NAME, touch.bookDuration);
+      // FIX (#2, #6): central availability check + UX feedback when refused.
+      bool ok = fsmCreateWalkUpBooking(WALK_UP_NAME, touch.bookDuration);
+      if (ok) {
         updateLED();
         megaSendConfirm(true);
       } else {
         megaSendConfirm(false);
+        megaSendMessage("Room unavailable. Swipe to view calendar");
       }
       // FIX: Start non-blocking timer instead of delay(3200)
       _confirmPending  = true;
@@ -218,7 +231,10 @@ static void onBookingMessage(const char* payload) {
     Serial.printf("[App] Slot: id=%s user=%s\n", slot.bookingId, slot.occupantName);
     fsmAddBooking(slot);
     updateLED();
-    syncDisplay();
+    // FIX: Do NOT call syncDisplay() here. On (re)connect the broker delivers
+    // every retained/queued booking back-to-back; sync-per-message caused the
+    // visible "refresh storm" on the Mega LCD. The 1 Hz loop sync below
+    // already redraws on the next tick.
     nvsSaveBookings(fsmGetSlots(), MAX_SLOTS);
 
   } else if (strcmp(statusVal, "cancelled") == 0) {
@@ -226,7 +242,7 @@ static void onBookingMessage(const char* payload) {
     extractStr(payload, "bookingId", bId, sizeof(bId));
     fsmCancelBooking(bId);
     updateLED();
-    syncDisplay();
+    // FIX: as above, defer redraw to the 1 Hz periodic syncDisplay().
   } else {
     Serial.printf("[App] Unknown status: '%s'\n", statusVal);
   }

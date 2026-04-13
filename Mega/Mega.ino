@@ -28,6 +28,10 @@ void setup() {
   myGLCD.InitLCD(LANDSCAPE);
   myGLCD.clrScr();
 
+  // Hand the LCD pointer to the protocol layer so local touch handlers
+  // (calendar scrolling) can redraw without an ESP32 round-trip.
+  megaProtocolSetLcd(&myGLCD);
+
   displayStartup(&myGLCD);
 
   Serial.println(F("Mega ready. Listening on Serial2 (Pins 16/17)."));

@@ -20,6 +20,8 @@ struct TouchPoint {
 #define GESTURE_TAP           'T'
 #define GESTURE_SWIPE_LEFT    'L'
 #define GESTURE_SWIPE_RIGHT   'R'
+#define GESTURE_SWIPE_UP      'U'
+#define GESTURE_SWIPE_DOWN    'D'
 
 void        touchInit();
 TouchPoint  touchRead();

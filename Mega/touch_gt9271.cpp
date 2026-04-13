@@ -99,13 +99,18 @@ char detectGesture(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) {
   int dx = (int)x2 - (int)x1;
   int dy = (int)y2 - (int)y1;
 
-  // 1. Check if the horizontal movement is significant (reduced to 60px)
-  // 2. Ensure it's more of a horizontal movement than a vertical one
+  // Horizontal swipe: significant dx and dx dominates
   if (abs(dx) > 60 && abs(dx) > abs(dy)) {
-    if (dx > 0) return GESTURE_SWIPE_RIGHT; // x2 > x1 means moving to the right
-    else return GESTURE_SWIPE_LEFT;         // x2 < x1 means moving to the left
+    if (dx > 0) return GESTURE_SWIPE_RIGHT;
+    else        return GESTURE_SWIPE_LEFT;
   }
 
-  // Otherwise, treat as a Tap
+  // Vertical swipe: significant dy and dy dominates. Used by the calendar
+  // screen to scroll the visible hour window.
+  if (abs(dy) > 50 && abs(dy) > abs(dx)) {
+    if (dy > 0) return GESTURE_SWIPE_DOWN;  // finger moved down
+    else        return GESTURE_SWIPE_UP;
+  }
+
   return GESTURE_TAP;
 }

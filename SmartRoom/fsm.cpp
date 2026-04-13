@@ -6,9 +6,6 @@
 
 static BookingSlot slots[MAX_SLOTS];
 static uint8_t slotCount = 0;
-static unsigned long pendingStartMs = 0;
-static unsigned long buzzerArmedMs  = 0;
-static bool          buzzerFired    = false;
 
 static void transitionTo(BookingSlot* slot, FSMState newState);
 static BookingSlot* findSlot(const char* bookingId);
@@ -33,8 +30,10 @@ void fsmAddBooking(const BookingSlot& incoming) {
   BookingSlot* slot = findFreeSlot();
   if (!slot) { Serial.println(F("[FSM] No free slot.")); return; }
   *slot = incoming;
-  slot->state  = STATE_SCHEDULED;
-  slot->active = true;
+  slot->state          = STATE_SCHEDULED;
+  slot->active         = true;
+  slot->pendingStartMs = 0;
+  slot->buzzerFired    = false;
   slotCount++;
   Serial.printf("[FSM] Added %s for %s\n", incoming.bookingId, incoming.occupantName);
 }
@@ -48,6 +47,11 @@ void fsmCancelBooking(const char* bookingId) {
   }
 }
 
+// FIX (#1): Per-slot grace timer — pendingStartMs lives on each BookingSlot,
+// so concurrent bookings each track their own grace window correctly.
+//
+// FIX (#4): Buzzer warning is now driven by absolute wall-clock time
+// (slot->endTime - now <= warning seconds), so it survives a reboot.
 void fsmTick(bool presenceDetected) {
   time_t now = time(nullptr) + 7200; // 2 hour offset for Kigali
   if (now < 1000000) return;
@@ -60,8 +64,8 @@ void fsmTick(bool presenceDetected) {
       case STATE_SCHEDULED:
         if (now >= s->startTime) {
           transitionTo(s, STATE_PENDING);
-          pendingStartMs = millis();
-          buzzerFired = false;
+          s->pendingStartMs = millis();   // FIX: per-slot
+          s->buzzerFired    = false;      // FIX: per-slot
           Serial.printf("[FSM] %s -> PENDING\n", s->bookingId);
         }
         break;
@@ -69,9 +73,6 @@ void fsmTick(bool presenceDetected) {
       case STATE_PENDING:
         if (presenceDetected) {
           transitionTo(s, STATE_ACTIVE);
-          unsigned long sessionMs = ((unsigned long)(s->endTime - now)) * 1000UL;
-          buzzerArmedMs = (sessionMs > BUZZER_WARNING_MS)
-                          ? millis() + (sessionMs - BUZZER_WARNING_MS) : 0;
           Serial.printf("[FSM] %s -> ACTIVE\n", s->bookingId);
           FsmEvent evt;
           evt.type = EVT_OCCUPANCY_CONFIRMED;
@@ -79,7 +80,7 @@ void fsmTick(bool presenceDetected) {
           strlcpy(evt.roomId, ROOM_ID, sizeof(evt.roomId));
           evt.timestamp = now;
           eventQueuePush(evt);
-        } else if (millis() - pendingStartMs >= GRACE_PERIOD_MS) {
+        } else if (millis() - s->pendingStartMs >= GRACE_PERIOD_MS) {
           transitionTo(s, STATE_GHOST);
           Serial.printf("[FSM] %s -> GHOST\n", s->bookingId);
           FsmEvent evt;
@@ -92,9 +93,13 @@ void fsmTick(bool presenceDetected) {
         }
         break;
 
-      case STATE_ACTIVE:
-        if (buzzerArmedMs > 0 && millis() >= buzzerArmedMs && !buzzerFired) {
-          buzzerFired = true;
+      case STATE_ACTIVE: {
+        // FIX (#4): absolute-time buzzer trigger. Survives reboot because
+        // it depends on wall clock, not millis() since boot.
+        long remaining = (long)s->endTime - (long)now;
+        long warningSecs = (long)(BUZZER_WARNING_MS / 1000UL);
+        if (!s->buzzerFired && remaining > 0 && remaining <= warningSecs) {
+          s->buzzerFired = true;
           extern void buzzerDoubleBeep();
           buzzerDoubleBeep();
           Serial.println(F("[FSM] 5-min warning."));
@@ -111,6 +116,7 @@ void fsmTick(bool presenceDetected) {
           s->active = false;
         }
         break;
+      }
 
       case STATE_GHOST:
       case STATE_COMPLETED:
@@ -119,20 +125,38 @@ void fsmTick(bool presenceDetected) {
   }
 }
 
-void fsmCreateWalkUpBooking(const char* occupantName, uint16_t durationMins) {
+// FIX (#2): central "is the room free *right now*" predicate.
+// Returns false if any slot is currently ACTIVE or PENDING (a session is in
+// progress or about to begin and waiting on occupancy confirmation).
+bool fsmIsRoomFreeNow() {
+  for (uint8_t i = 0; i < MAX_SLOTS; i++) {
+    if (!slots[i].active) continue;
+    if (slots[i].state == STATE_ACTIVE || slots[i].state == STATE_PENDING) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// FIX (#2): walk-up booking now refuses to clobber an existing ACTIVE/PENDING
+// session. Returns false if rejected so the caller can show feedback.
+bool fsmCreateWalkUpBooking(const char* occupantName, uint16_t durationMins) {
+  if (!fsmIsRoomFreeNow()) {
+    Serial.println(F("[FSM] Walk-up rejected: room not free."));
+    return false;
+  }
   BookingSlot* slot = findFreeSlot();
-  if (!slot) { Serial.println(F("[FSM] No free slot for walk-up.")); return; }
+  if (!slot) { Serial.println(F("[FSM] No free slot for walk-up.")); return false; }
   time_t now = time(nullptr) + 7200; // 2 hour offset for Kigali
+  memset(slot, 0, sizeof(*slot));
   snprintf(slot->bookingId, sizeof(slot->bookingId), "wu_%lu", (unsigned long)now);
   strlcpy(slot->occupantName, occupantName, sizeof(slot->occupantName));
-  slot->startTime = now;
-  slot->endTime   = now + (durationMins * 60);
-  slot->state     = STATE_ACTIVE;
-  slot->active    = true;
-  unsigned long sessionMs = (unsigned long)durationMins * 60 * 1000UL;
-  buzzerArmedMs = (sessionMs > BUZZER_WARNING_MS)
-                  ? millis() + (sessionMs - BUZZER_WARNING_MS) : 0;
-  buzzerFired = false;
+  slot->startTime      = now;
+  slot->endTime        = now + (durationMins * 60);
+  slot->state          = STATE_ACTIVE;
+  slot->active         = true;
+  slot->pendingStartMs = 0;
+  slot->buzzerFired    = false;
   Serial.printf("[FSM] Walk-up: %s for %u min\n", slot->bookingId, durationMins);
   FsmEvent evt;
   evt.type = EVT_WALK_UP_BOOKING;
@@ -140,6 +164,7 @@ void fsmCreateWalkUpBooking(const char* occupantName, uint16_t durationMins) {
   strlcpy(evt.roomId, ROOM_ID, sizeof(evt.roomId));
   evt.timestamp = now;
   eventQueuePush(evt);
+  return true;
 }
 
 // FIX: Priority ordering: ACTIVE > PENDING > SCHEDULED > others
@@ -150,8 +175,6 @@ FSMState fsmGetCurrentState() {
   for (uint8_t i = 0; i < MAX_SLOTS; i++) {
     if (!slots[i].active) continue;
     FSMState s = slots[i].state;
-    // Priority: ACTIVE(2) > PENDING(1) > SCHEDULED(0) > GHOST(3) > COMPLETED(4)
-    // Map to urgency numbers for comparison
     auto urgency = [](FSMState st) -> int {
       switch (st) {
         case STATE_ACTIVE:    return 4;
@@ -167,12 +190,7 @@ FSMState fsmGetCurrentState() {
 }
 
 bool fsmRoomIsAvailable() {
-  for (uint8_t i = 0; i < MAX_SLOTS; i++) {
-    if (slots[i].active &&
-        (slots[i].state == STATE_ACTIVE || slots[i].state == STATE_PENDING))
-      return false;
-  }
-  return true;
+  return fsmIsRoomFreeNow();
 }
 
 // FIX: fsmGetActiveSlot also uses priority - returns ACTIVE before PENDING

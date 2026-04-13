@@ -177,18 +177,25 @@ void mqttLoop() {
 bool mqttConnected() { return _mqtt.connected(); }
 
 void mqttPublishStatus(const FsmEvent& evt) {
-  const char* typeStr = "unknown";
+  // Backend (server/services/mqttBridge.js::handleRoomStatus) reads:
+  //   payload.state  ∈ {"active","ghost_released","completed"}
+  //   payload.timestamp (ISO string OR epoch — backend falls back to "now")
+  // Map our internal event vocabulary onto that contract so events are
+  // actually persisted instead of being logged as "Missing state".
+  const char* state = "unknown";
   switch (evt.type) {
-    case EVT_OCCUPANCY_CONFIRMED: typeStr = "occupancy_confirmed"; break;
-    case EVT_GHOST_RELEASED:      typeStr = "ghost_released";      break;
-    case EVT_SESSION_COMPLETED:   typeStr = "session_completed";   break;
-    case EVT_WALK_UP_BOOKING:     typeStr = "walk_up_booking";     break;
+    case EVT_OCCUPANCY_CONFIRMED: state = "active";         break;
+    case EVT_GHOST_RELEASED:      state = "ghost_released"; break;
+    case EVT_SESSION_COMPLETED:   state = "completed";      break;
+    // Walk-up bookings have no exact backend equivalent — represent them
+    // as an "active" transition so the room is at least marked occupied.
+    case EVT_WALK_UP_BOOKING:     state = "active";         break;
   }
   char payload[256];
   snprintf(payload, sizeof(payload),
-           "{\"room_id\":\"%s\",\"booking_id\":\"%s\","
-           "\"event_type\":\"%s\",\"timestamp\":%lu}",
-           evt.roomId, evt.bookingId, typeStr, (unsigned long)evt.timestamp);
+           "{\"roomId\":\"%s\",\"bookingId\":\"%s\","
+           "\"state\":\"%s\",\"timestamp\":%lu}",
+           evt.roomId, evt.bookingId, state, (unsigned long)evt.timestamp);
 
   if (!_mqtt.publish(TOPIC_STATUS, payload, false)) {
     Serial.println(F("[MQTT] Publish failed — re-queuing."));

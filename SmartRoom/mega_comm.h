@@ -27,6 +27,10 @@ void megaSendConfirm(bool success);
 void megaSendOfflineWarning(bool show);
 void megaSendStartup();
 
+// FIX (#6): Send a free-form text message to the Mega for transient feedback
+// (e.g. walk-up booking rejection).
+void megaSendMessage(const char* text);
+
 void    megaSetRemoteScreen(uint8_t screen);
 uint8_t megaGetRemoteScreen();
 

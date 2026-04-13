@@ -8,4 +8,8 @@
 void handleIncomingCommand(UTFT* lcd);
 void sendTouchEvent(TouchPoint tp);
 
+// Allows local touch handlers (e.g. calendar scrolling) to redraw without
+// a round trip through the ESP32. Call once from setup() with the global UTFT.
+void megaProtocolSetLcd(UTFT* lcd);
+
 #endif
