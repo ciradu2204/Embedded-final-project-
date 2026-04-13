@@ -33,12 +33,47 @@ static uint8_t       _wifiTries       = 0;
 static const uint8_t WIFI_MAX_TRIES   = 40;    // 40 * 500ms = 20s max
 
 static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
-  char buf[256];
+  // Snapshot can be larger than a single booking — give it room.
+  static char buf[2048];
   uint16_t len = min((unsigned int)(sizeof(buf) - 1), length);
   memcpy(buf, payload, len);
   buf[len] = '\0';
-  Serial.printf("[MQTT] Received on %s: %s\n", topic, buf);
-  if (strstr(topic, "/booking") && _bookingCb) {
+  Serial.printf("[MQTT] Received on %s (%u bytes)\n", topic, (unsigned)len);
+
+  if (!_bookingCb) return;
+
+  // Snapshot topic carries an array of bookings — split into single-object
+  // chunks and dispatch each through the same parser used for /booking.
+  if (strstr(topic, "/bookings/snapshot")) {
+    const char* p = strchr(buf, '[');
+    if (!p) return;
+    p++;
+    while (*p) {
+      while (*p && *p != '{' && *p != ']') p++;
+      if (*p != '{') break;
+      const char* start = p;
+      int depth = 0;
+      while (*p) {
+        if (*p == '{') depth++;
+        else if (*p == '}') {
+          depth--;
+          if (depth == 0) { p++; break; }
+        }
+        p++;
+      }
+      size_t objLen = (size_t)(p - start);
+      if (objLen > 0 && objLen < sizeof(buf) - 1) {
+        char obj[512];
+        if (objLen >= sizeof(obj)) objLen = sizeof(obj) - 1;
+        memcpy(obj, start, objLen);
+        obj[objLen] = '\0';
+        _bookingCb(obj);
+      }
+    }
+    return;
+  }
+
+  if (strstr(topic, "/booking")) {
     _bookingCb(buf);
   }
 }
@@ -97,7 +132,9 @@ static bool connectMQTT() {
   if (_mqtt.connect(clientId, MQTT_USER, MQTT_PASS)) {
     Serial.println(F("[MQTT] Connected OK."));
     _mqtt.subscribe(TOPIC_BOOKING);
+    _mqtt.subscribe(TOPIC_SNAPSHOT);
     Serial.printf("[MQTT] Subscribed: %s\n", TOPIC_BOOKING);
+    Serial.printf("[MQTT] Subscribed: %s\n", TOPIC_SNAPSHOT);
     return true;
   }
 
@@ -113,7 +150,7 @@ void mqttInit() {
   _wifiClient.setInsecure();
   _mqtt.setServer(MQTT_HOST, MQTT_PORT);
   _mqtt.setCallback(onMqttMessage);
-  _mqtt.setBufferSize(512);
+  _mqtt.setBufferSize(2048);  // snapshot payloads can hold up to ~20 bookings
   _mqtt.setKeepAlive(30);
   _mqtt.setSocketTimeout(10);
 

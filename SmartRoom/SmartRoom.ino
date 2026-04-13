@@ -151,7 +151,8 @@ void loop() {
   // Display sync — suppressed on sub-screens and during confirmation overlay
   if (now - _lastDisplaySyncMs >= DISPLAY_SYNC_INTERVAL_MS) {
     _lastDisplaySyncMs = now;
-    if (megaGetRemoteScreen() == 0 && !_confirmPending) {
+    uint8_t remote = megaGetRemoteScreen();
+    if (remote == 0 && !_confirmPending) {
       syncDisplay();
       bool offline = !mqttConnected();
       megaSendOfflineWarning(offline);
@@ -161,6 +162,24 @@ void loop() {
       if (offline && now - _lastOfflineBlipMs >= OFFLINE_BLIP_INTERVAL_MS) {
         _lastOfflineBlipMs = now;
         buzzerOfflineBlip();
+      }
+    } else if (remote == 1) {
+      // Calendar screen open: refresh booking data so newly arrived snapshots
+      // appear without the user having to leave and re-open the calendar.
+      // Only resend when the slot fingerprint actually changes — avoids the
+      // grid flicker that a per-second redraw would cause.
+      static uint32_t lastCalHash = 0;
+      uint32_t h = 2166136261u;
+      BookingSlot* s = fsmGetSlots();
+      for (uint8_t i = 0; i < MAX_SLOTS; i++) {
+        if (!s[i].active) continue;
+        h ^= (uint32_t)s[i].startTime; h *= 16777619u;
+        h ^= (uint32_t)s[i].endTime;   h *= 16777619u;
+        h ^= (uint32_t)s[i].state;     h *= 16777619u;
+      }
+      if (h != lastCalHash) {
+        lastCalHash = h;
+        megaSendCalendarData(fsmGetSlots(), MAX_SLOTS);
       }
     }
   }

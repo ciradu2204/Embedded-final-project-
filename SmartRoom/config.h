@@ -21,8 +21,9 @@
 
 // ── MQTT topics ───────────────────────────────────────────────────────
 // Updated to ensure they match the database mapping exactly
-#define TOPIC_BOOKING  "smartroom/" ROOM_ID "/booking"
-#define TOPIC_STATUS   "smartroom/" ROOM_ID "/status"
+#define TOPIC_BOOKING   "smartroom/" ROOM_ID "/booking"
+#define TOPIC_SNAPSHOT  "smartroom/" ROOM_ID "/bookings/snapshot"
+#define TOPIC_STATUS    "smartroom/" ROOM_ID "/status"
 
 // ── GPIO pins ─────────────────────────────────────────────────────────
 #define PIN_GREEN_LED   25

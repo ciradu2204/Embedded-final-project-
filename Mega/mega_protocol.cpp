@@ -208,8 +208,16 @@ void sendTouchEvent(TouchPoint tp) {
       if (gesture == GESTURE_SWIPE_LEFT) {
         Serial2.print("{\"evt\":\"TOUCH\",\"gesture\":\"L\"}\n");
       } else if (gesture == GESTURE_TAP) {
-        // FIX: Use downX and downY to check where the tap occurred
-        if (downX >= 20 && downX <= 280 && downY >= 230 && downY <= 300) {
+        // FIX: BOOK NOW button is only drawn when the room is available
+        // (SCHEDULED / GHOST / COMPLETED). Previously the tap target stayed
+        // hot during ACTIVE/PENDING and the user could open the booking
+        // screen while a session was already in progress.
+        bool roomAvailable = (currentData.state == STATE_SCHEDULED ||
+                              currentData.state == STATE_GHOST     ||
+                              currentData.state == STATE_COMPLETED);
+        if (roomAvailable &&
+            downX >= 20 && downX <= 280 &&
+            downY >= 230 && downY <= 300) {
           Serial.println(F("[Touch] BOOK NOW"));
           Serial2.print("{\"evt\":\"TOUCH\",\"gesture\":\"BOOKNOW\"}\n");
         }
