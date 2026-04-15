@@ -35,6 +35,7 @@ void setup() {
   displayStartup(&myGLCD);
 
   Serial.println(F("Mega ready. Listening on Serial2 (Pins 16/17)."));
+  Serial.println(F("[BUILD] trace-v2 calendar diagnostics"));
 }
 
 void loop() {
