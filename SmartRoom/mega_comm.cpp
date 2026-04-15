@@ -102,42 +102,33 @@ void megaSendStatus(const char* roomName, uint8_t state,
 // Send calendar booking data to Mega for display on calendar screen.
 // Sends up to 'count' slots. Each slot has start/end Unix timestamps and name.
 void megaSendCalendarData(BookingSlot* slots, uint8_t count) {
-  // The Mega's default HardwareSerial RX ring is only 64 bytes. A CALSLOT
-  // line is often 90-130 bytes, so we send it in two halves separated by a
-  // long enough pause for the Mega's loop() to read the first half out of
-  // the ring before the second half lands. Same logic for CALDONE.
-  //
-  // 150 ms is overkill but safe: even if the Mega is mid-LCD op or mid-I2C
-  // stall, loop() will cycle through at least once in that window. Calendar
-  // render is a rare user action so the cost is invisible.
+  // Mega's default HardwareSerial RX ring is 64 bytes and a CALSLOT line
+  // is ~90-130 bytes, so we split each CALSLOT at byte 48 with a pause in
+  // between. No flush() — ESP32 HardwareSerial.flush() can block for a
+  // long time under contention, and the delays here are already long
+  // enough that any reasonable hardware will finish the transmit.
   for (uint8_t i = 0; i < MAX_SLOTS; i++) {
     if (!slots[i].active) continue;
     if (slots[i].state == STATE_COMPLETED || slots[i].state == STATE_GHOST) continue;
     char buf[200];
-    snprintf(buf, sizeof(buf),
+    int len = snprintf(buf, sizeof(buf),
              "{\"cmd\":\"CALSLOT\",\"s\":%lu,\"e\":%lu,\"n\":\"%s\",\"t\":\"%s\",\"st\":%u}\n",
              (unsigned long)slots[i].startTime,
              (unsigned long)slots[i].endTime,
              slots[i].occupantName,
              slots[i].title,
              (uint8_t)slots[i].state);
-    // Split into halves around the first 50-byte mark so neither fragment
-    // exceeds the 64-byte RX ring before the Mega drains it.
-    size_t len = strlen(buf);
-    if (len > 50) {
-      MegaSerial.write((const uint8_t*)buf, 50);
-      MegaSerial.flush();
-      delay(80);
-      MegaSerial.write((const uint8_t*)(buf + 50), len - 50);
-      MegaSerial.flush();
+    if (len <= 0) continue;
+    if (len > 48) {
+      MegaSerial.write((const uint8_t*)buf, 48);
+      delay(60);
+      MegaSerial.write((const uint8_t*)(buf + 48), len - 48);
     } else {
-      MegaSerial.print(buf);
-      MegaSerial.flush();
+      MegaSerial.write((const uint8_t*)buf, len);
     }
-    delay(150);  // let Mega process this CALSLOT fully before the next one
+    delay(120);
   }
   MegaSerial.print("{\"cmd\":\"CALDONE\"}\n");
-  MegaSerial.flush();
 }
 
 void megaSendCalendar()   { MegaSerial.print("{\"cmd\":\"CALENDAR\"}\n"); }

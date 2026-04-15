@@ -125,18 +125,18 @@ void loop() {
       _confirmClearMs  = now;
 
     } else if (strcmp(touch.gesture, "L") == 0) {
-      // Switch the Mega to the calendar screen. The actual CALSLOT/CALDONE
-      // burst is driven by the 1 Hz hash-refresh loop below (it sees
-      // remote==1 on the next tick and sends fresh data). Doing both a
-      // direct send here AND the hash refresh was producing two colliding
-      // bursts that overflowed the Mega's 64B UART ring and dropped the
-      // CALSLOT / CALDONE packets mid-flight.
+      // Switch the Mega to the calendar screen and send data directly.
+      // megaSendCalendar() resets Mega's slot buffer, then we send the
+      // current slot table with byte-level pacing (see megaSendCalendarData).
+      //
+      // We also bump _lastDisplaySyncMs forward so the 1Hz hash-refresh
+      // doesn't fire again immediately and collide with this burst.
       megaSendCalendar();
       megaSetRemoteScreen(1);
-      // Force the next hash-refresh tick to fire immediately with a fresh
-      // send, regardless of whether the slot fingerprint changed.
-      _lastDisplaySyncMs = 0;
-      _calNeedFullSend   = true;
+      delay(200);  // let the Mega process the CALENDAR reset before CALSLOTs
+      megaSendCalendarData(fsmGetSlots(), MAX_SLOTS);
+      _lastDisplaySyncMs = now;    // suppress next tick
+      _calNeedFullSend   = false;
 
     } else if (strcmp(touch.gesture, "R") == 0
             || strcmp(touch.gesture, "CANCEL") == 0) {
@@ -191,6 +191,12 @@ void loop() {
       if (_calNeedFullSend || h != lastCalHash) {
         _calNeedFullSend = false;
         lastCalHash = h;
+        // Reset the Mega's slot buffer before sending the new set — without
+        // this the Mega keeps appending and calSlotCount grows unbounded
+        // across refreshes, eventually hitting MAX_CAL_SLOTS and dropping
+        // real data.
+        megaSendCalendar();
+        delay(200);
         megaSendCalendarData(fsmGetSlots(), MAX_SLOTS);
       }
     }
