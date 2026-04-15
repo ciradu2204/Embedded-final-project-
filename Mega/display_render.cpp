@@ -102,6 +102,7 @@ void displayStatusScreen(UTFT* lcd, RoomDisplayData* d) {
                       (d->state != _prevData.state) ||
                       (strcmp(d->roomName,     _prevData.roomName)     != 0) ||
                       (strcmp(d->occupantName, _prevData.occupantName) != 0) ||
+                      (strcmp(d->title,        _prevData.title)        != 0) ||
                       (strcmp(d->startTime,    _prevData.startTime)    != 0) ||
                       (strcmp(d->endTime,      _prevData.endTime)      != 0);
 

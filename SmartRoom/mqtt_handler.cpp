@@ -33,8 +33,9 @@ static uint8_t       _wifiTries       = 0;
 static const uint8_t WIFI_MAX_TRIES   = 40;    // 40 * 500ms = 20s max
 
 static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
-  // Snapshot can be larger than a single booking — give it room.
-  static char buf[2048];
+  // Must match the PubSubClient buffer size — snapshots can carry 20+
+  // bookings and each is ~250 bytes after JSON serialization.
+  static char buf[8192];
   uint16_t len = min((unsigned int)(sizeof(buf) - 1), length);
   memcpy(buf, payload, len);
   buf[len] = '\0';
@@ -150,7 +151,9 @@ void mqttInit() {
   _wifiClient.setInsecure();
   _mqtt.setServer(MQTT_HOST, MQTT_PORT);
   _mqtt.setCallback(onMqttMessage);
-  _mqtt.setBufferSize(2048);  // snapshot payloads can hold up to ~20 bookings
+  // Snapshot payloads can be several KB with 20+ bookings. PubSubClient
+  // silently drops messages larger than this buffer, so err on the safe side.
+  _mqtt.setBufferSize(8192);
   _mqtt.setKeepAlive(30);
   _mqtt.setSocketTimeout(10);
 

@@ -50,6 +50,7 @@ struct FsmEvent {
 };
 
 // ── Maximum booking slots held in memory ─────────────────────────────────────
-#define MAX_SLOTS 10
+// Must be >= the backend snapshot limit in mqttBridge.js (currently 20).
+#define MAX_SLOTS 24
 
 #endif

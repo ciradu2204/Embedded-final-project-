@@ -10,8 +10,9 @@
 #define STATE_GHOST       3
 #define STATE_COMPLETED   4
 
-// Max calendar slots to display
-#define MAX_CAL_SLOTS  10
+// Max calendar slots to display. Must track the ESP32's MAX_SLOTS so every
+// booking the device knows about can be rendered on the grid.
+#define MAX_CAL_SLOTS  24
 
 // ── Calendar viewport ──────────────────────────────────────────────────────────
 // Day spans 07:00 – 22:00 (15 hours). 8 hour rows are visible at a time and the

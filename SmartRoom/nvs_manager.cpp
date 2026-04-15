@@ -12,7 +12,8 @@ void nvsInit() {
 // Serialise active slots to compact JSON and write to flash.
 // Example: [{"id":"aaba834a-...","occ":"Alice","s":1714000000,"e":1714003600,"st":2}]
 void nvsSaveBookings(BookingSlot* slots, uint8_t count) {
-  char buf[1024];
+  // Must fit up to MAX_SLOTS * ~150 bytes per booking + brackets.
+  char buf[4096];
   uint16_t pos = 0;
 
   buf[pos++] = '[';
