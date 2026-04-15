@@ -26,6 +26,7 @@ typedef enum {
 struct BookingSlot {
   char          bookingId[40];     // UUID from cloud backend e.g. "aaba834a-51ed-46c7-9512-60d5f696cff2"
   char          occupantName[32];  // Display name of person who booked
+  char          title[40];         // Booking purpose / title (e.g. "Meeting", "Class")
   time_t        startTime;         // Unix timestamp
   time_t        endTime;           // Unix timestamp
   FSMState      state;
@@ -38,9 +39,14 @@ struct BookingSlot {
 // roomId is 40 chars to hold a full UUID room ID
 struct FsmEvent {
   EventType type;
-  char      bookingId[40];   // UUID
+  char      bookingId[40];   // UUID (or local walk-up id like "wu_123")
   time_t    timestamp;
   char      roomId[40];      // UUID
+  // Extra context for walk-up events — unused for other event types.
+  char      title[40];
+  char      occupantName[32];
+  time_t    startTime;
+  time_t    endTime;
 };
 
 // ── Maximum booking slots held in memory ─────────────────────────────────────

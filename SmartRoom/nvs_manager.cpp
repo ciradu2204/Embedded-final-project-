@@ -24,10 +24,11 @@ void nvsSaveBookings(BookingSlot* slots, uint8_t count) {
     first = false;
 
     pos += snprintf(buf + pos, sizeof(buf) - pos,
-                    "{\"id\":\"%s\",\"occ\":\"%s\","
+                    "{\"id\":\"%s\",\"occ\":\"%s\",\"tt\":\"%s\","
                     "\"s\":%lu,\"e\":%lu,\"st\":%u}",
                     slots[i].bookingId,
                     slots[i].occupantName,
+                    slots[i].title,
                     (unsigned long)slots[i].startTime,
                     (unsigned long)slots[i].endTime,
                     (uint8_t)slots[i].state);
@@ -87,6 +88,7 @@ uint8_t nvsLoadBookings(BookingSlot* slots, uint8_t maxCount) {
 
         if (strcmp(key, "id")  == 0) strlcpy(s.bookingId,    val, sizeof(s.bookingId));
         if (strcmp(key, "occ") == 0) strlcpy(s.occupantName, val, sizeof(s.occupantName));
+        if (strcmp(key, "tt")  == 0) strlcpy(s.title,        val, sizeof(s.title));
       } else {
         long num = atol(p);
         while (*p && *p != ',' && *p != '}') p++;

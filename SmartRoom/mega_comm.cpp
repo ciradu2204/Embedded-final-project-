@@ -3,7 +3,7 @@
 
 #define MegaSerial Serial2
 
-static MegaTouchEvent _lastEvent     = {false, "", 0, 0, 0};
+static MegaTouchEvent _lastEvent     = {false, "", 0, 0, 0, ""};
 static char           _rxBuf[256];
 static uint8_t        _rxPos         = 0;
 static uint8_t        _remoteScreen  = 0;
@@ -64,7 +64,9 @@ void megaCommTick() {
           _lastEvent.valid = true;
           strlcpy(_lastEvent.gesture, "BOOK", sizeof(_lastEvent.gesture));
           _lastEvent.bookDuration = (uint16_t)dur;
-          Serial.printf("[MegaComm] Walk-up: %u min\n", dur);
+          _lastEvent.bookPurpose[0] = '\0';
+          extractStr(_rxBuf, "purpose", _lastEvent.bookPurpose, sizeof(_lastEvent.bookPurpose));
+          Serial.printf("[MegaComm] Walk-up: %u min purpose=%s\n", dur, _lastEvent.bookPurpose);
         }
       }
     } else {
@@ -83,15 +85,16 @@ void megaSetRemoteScreen(uint8_t screen) { _remoteScreen = screen; }
 uint8_t megaGetRemoteScreen()            { return _remoteScreen; }
 
 void megaSendStatus(const char* roomName, uint8_t state,
-                    const char* occupantName,
+                    const char* occupantName, const char* title,
                     const char* startTime, const char* endTime,
                     uint16_t countdownMins, uint32_t countdownSecs) {
-  char buf[280];
+  char buf[320];
   snprintf(buf, sizeof(buf),
            "{\"cmd\":\"STATUS\",\"room\":\"%s\",\"state\":%u,"
-           "\"occ\":\"%s\",\"start\":\"%s\",\"end\":\"%s\","
+           "\"occ\":\"%s\",\"title\":\"%s\","
+           "\"start\":\"%s\",\"end\":\"%s\","
            "\"mins\":%u,\"secs\":%lu}\n",
-           roomName, state, occupantName,
+           roomName, state, occupantName, title ? title : "",
            startTime, endTime, countdownMins, (unsigned long)countdownSecs);
   MegaSerial.print(buf);
 }
@@ -103,12 +106,13 @@ void megaSendCalendarData(BookingSlot* slots, uint8_t count) {
   for (uint8_t i = 0; i < MAX_SLOTS; i++) {
     if (!slots[i].active) continue;
     if (slots[i].state == STATE_COMPLETED || slots[i].state == STATE_GHOST) continue;
-    char buf[160];
+    char buf[200];
     snprintf(buf, sizeof(buf),
-             "{\"cmd\":\"CALSLOT\",\"s\":%lu,\"e\":%lu,\"n\":\"%s\",\"st\":%u}\n",
+             "{\"cmd\":\"CALSLOT\",\"s\":%lu,\"e\":%lu,\"n\":\"%s\",\"t\":\"%s\",\"st\":%u}\n",
              (unsigned long)slots[i].startTime,
              (unsigned long)slots[i].endTime,
              slots[i].occupantName,
+             slots[i].title,
              (uint8_t)slots[i].state);
     MegaSerial.print(buf);
     Serial.printf("[CalSend] slot %u: %s", i, buf);

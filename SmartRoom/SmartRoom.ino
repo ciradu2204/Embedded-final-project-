@@ -107,7 +107,8 @@ void loop() {
 
     if (strcmp(touch.gesture, "BOOK") == 0 && touch.bookDuration > 0) {
       // FIX (#2, #6): central availability check + UX feedback when refused.
-      bool ok = fsmCreateWalkUpBooking(WALK_UP_NAME, touch.bookDuration);
+      const char* purpose = touch.bookPurpose[0] ? touch.bookPurpose : "Walk-up";
+      bool ok = fsmCreateWalkUpBooking(WALK_UP_NAME, touch.bookDuration, purpose);
       if (ok) {
         updateLED();
         megaSendConfirm(true);
@@ -118,10 +119,6 @@ void loop() {
       // FIX: Start non-blocking timer instead of delay(3200)
       _confirmPending  = true;
       _confirmClearMs  = now;
-
-    } else if (strcmp(touch.gesture, "BOOKNOW") == 0) {
-      megaSendBookNow();
-      megaSetRemoteScreen(2);
 
     } else if (strcmp(touch.gesture, "L") == 0) {
       // Send calendar screen command then immediately send booking data
@@ -229,11 +226,14 @@ static void onBookingMessage(const char* payload) {
   char statusVal[16] = {0};
   extractStr(payload, "status", statusVal, sizeof(statusVal));
 
-  if (strcmp(statusVal, "scheduled") == 0) {
+  // Accept both "scheduled" and "active" — the snapshot topic carries active
+  // bookings too (a session already in progress when the device booted).
+  if (strcmp(statusVal, "scheduled") == 0 || strcmp(statusVal, "active") == 0) {
     BookingSlot slot;
     memset(&slot, 0, sizeof(slot));
     extractStr(payload, "bookingId",  slot.bookingId,    sizeof(slot.bookingId));
     extractStr(payload, "userName",   slot.occupantName, sizeof(slot.occupantName));
+    extractStr(payload, "title",      slot.title,        sizeof(slot.title));
     long rawStart = extractLong(payload, "startTime");
     if (rawStart > 1000000) {
       slot.startTime = (time_t)rawStart;
@@ -288,17 +288,18 @@ static uint32_t fsmCountdownSecs() {
 static void syncDisplay() {
   FSMState     state = fsmGetCurrentState();
   BookingSlot* slot  = fsmGetActiveSlot();
-  char     startStr[12] = "--:--", endStr[12] = "--:--", occupant[32] = "";
+  char     startStr[12] = "--:--", endStr[12] = "--:--", occupant[32] = "", title[40] = "";
   uint16_t mins = 0;
   uint32_t secs = 0;
   if (slot) {
     formatTime(slot->startTime, startStr, sizeof(startStr));
     formatTime(slot->endTime,   endStr,   sizeof(endStr));
     strlcpy(occupant, slot->occupantName, sizeof(occupant));
+    strlcpy(title,    slot->title,        sizeof(title));
     secs = fsmCountdownSecs();
     mins = (uint16_t)(secs / 60);
   }
-  megaSendStatus(ROOM_NAME, (uint8_t)state, occupant, startStr, endStr, mins, secs);
+  megaSendStatus(ROOM_NAME, (uint8_t)state, occupant, title, startStr, endStr, mins, secs);
 }
 
 static void formatTime(time_t t, char* buf, uint8_t bufLen) {

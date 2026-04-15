@@ -10,13 +10,14 @@ struct MegaTouchEvent {
   uint16_t x;
   uint16_t y;
   uint16_t bookDuration;
+  char     bookPurpose[24];  // walk-up purpose string (Meeting/Class/Study/Event/Other)
 };
 
 void megaCommInit();
 void megaCommTick();
 
 void megaSendStatus(const char* roomName, uint8_t state,
-                    const char* occupantName,
+                    const char* occupantName, const char* title,
                     const char* startTime, const char* endTime,
                     uint16_t countdownMins, uint32_t countdownSecs);
 

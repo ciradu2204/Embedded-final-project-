@@ -24,6 +24,7 @@
 #define TOPIC_BOOKING   "smartroom/" ROOM_ID "/booking"
 #define TOPIC_SNAPSHOT  "smartroom/" ROOM_ID "/bookings/snapshot"
 #define TOPIC_STATUS    "smartroom/" ROOM_ID "/status"
+#define TOPIC_WALK_UP   "smartroom/" ROOM_ID "/walk-up"
 
 // ── GPIO pins ─────────────────────────────────────────────────────────
 #define PIN_GREEN_LED   25
@@ -51,6 +52,10 @@
 
 // ── Event buffer ──────────────────────────────────────────────────────
 #define EVENT_BUFFER_SIZE  20
+
+// ── Admin PIN for walk-up bookings ───────────────────────────────────
+// Required to enter the BOOK NOW screen. Change here as needed.
+#define ADMIN_PIN  "1234"
 
 // ── NVS ───────────────────────────────────────────────────────────────
 #define NVS_NAMESPACE    "smartroom"

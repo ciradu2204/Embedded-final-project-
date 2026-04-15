@@ -133,16 +133,24 @@ void displayStatusScreen(UTFT* lcd, RoomDisplayData* d) {
 
     if (d->state == STATE_ACTIVE || d->state == STATE_PENDING) {
       lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
-      lcdPrint(lcd, "Booked by:", 20, 225);
+      lcdPrint(lcd, "Booked by:", 20, 220);
       lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
-      lcdPrint(lcd, d->occupantName, 20, 245);
+      lcdPrint(lcd, d->occupantName, 20, 238);
+
+      if (d->title[0]) {
+        lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
+        lcdPrint(lcd, "Purpose:", 20, 270);
+        lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
+        lcdPrint(lcd, d->title, 20, 288);
+      }
+
       lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
-      lcdPrint(lcd, "Session:", 20, 295);
+      lcdPrint(lcd, "Session:", 20, 320);
       lcd->setColor(COL_WHITE);
       char timeBuf[32];
       strcpy(timeBuf, d->startTime); strcat(timeBuf, " - "); strcat(timeBuf, d->endTime);
       lcd->setFont(BigFont);
-      lcdPrint(lcd, timeBuf, 20, 315);
+      lcdPrint(lcd, timeBuf, 20, 338);
     } else {
       // Book Now button — x:20-280, y:230-300
       drawPanel(lcd, 20, 230, 260, 70, 0, 100, 200);
@@ -411,27 +419,214 @@ void displayMessage(UTFT* lcd, const char* text) {
   lcd->setBackColor(COL_BG);
 }
 
-// ── Book Now ──────────────────────────────────────────────────────────────────
+// ── Book Now (combined picker) ────────────────────────────────────────────────
+// Layout (used by the touch router in mega_protocol.cpp — keep in sync):
+//
+//   Header  y=0..70
+//   "Duration" label       y=85
+//   Duration chips row     y=110..170   (4 chips, 180px wide, 15px gap)
+//     chip 0: x= 20..200   = 1 min
+//     chip 1: x=215..395   = 15 min
+//     chip 2: x=410..590   = 30 min
+//     chip 3: x=605..785   = 60 min
+//   "Purpose" label        y=195
+//   Purpose chips row      y=220..280   (5 chips, 150px wide, 6px gap)
+//     chip 0: x= 20..170   Meeting
+//     chip 1: x=176..326   Class
+//     chip 2: x=332..482   Study
+//     chip 3: x=488..638   Event
+//     chip 4: x=644..794   Other
+//   Selection summary      y=300
+//   Confirm button         x=260..540, y=400..460
+//   Cancel button          x=20..180,  y=400..460
+
+static void drawChip(UTFT* lcd, int x, int y, int w, int h,
+                     const char* label, bool selected) {
+  if (selected) drawPanel(lcd, x, y, w, h, 0, 160, 220);
+  else          drawPanel(lcd, x, y, w, h, 0,  80, 160);
+  lcd->setBackColor(selected ? 0 : 0, selected ? 160 : 80, selected ? 220 : 160);
+  lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
+  int textW = strlen(label) * 16;
+  int tx = x + (w - textW) / 2;
+  if (tx < x + 4) tx = x + 4;
+  lcd->print(const_cast<char*>(label), tx, y + (h - 16) / 2);
+  lcd->setBackColor(COL_BG);
+}
+
+static const char* const BOOK_DURATIONS[4] = {"1 min", "15 min", "30 min", "60 min"};
+static const int BOOK_DURATION_MINS[4]     = {1, 15, 30, 60};
+static const char* const BOOK_PURPOSES[5]  = {"Meeting", "Class", "Study", "Event", "Other"};
+
+static int8_t _selectedDurIdx     = -1;
+static int8_t _selectedPurposeIdx = -1;
+
 void displayBookNowScreen(UTFT* lcd) {
+  _selectedDurIdx     = -1;
+  _selectedPurposeIdx = -1;
+
   lcd->clrScr(); lcd->setBackColor(COL_BG);
   drawPanel(lcd, 0, 0, SCR_W, 70, COL_NAVY);
   lcd->setColor(COL_WHITE); lcd->setBackColor(COL_NAVY);
   lcd->setFont(BigFont); lcdPrint(lcd, "Book this room", 20, 20);
-  lcd->setBackColor(COL_BG); lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
-  lcdPrint(lcd, "Select duration:", 20, 100);
-  int bx[3]  = {40, 280, 520};
-  char bl[3][12] = {"15 minutes", "30 minutes", "60 minutes"};
-  for (int i = 0; i < 3; i++) {
-    drawPanel(lcd, bx[i], 130, 200, 100, 0, 80, 160);
-    lcd->setBackColor(0, 80, 160); lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
-    lcd->print(bl[i], bx[i] + 10, 168);
-  }
-  lcd->setBackColor(COL_BG); lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
-  lcdPrint(lcd, "Tap duration to confirm. Syncs to cloud.", 20, 380);
-  drawPanel(lcd, 320, 420, 160, 44, 80, 20, 20);
-  lcd->setBackColor(80, 20, 20); lcd->setColor(COL_WHITE); lcd->setFont(SmallFont);
-  lcdPrint(lcd, "Cancel", 365, 435);
   lcd->setBackColor(COL_BG);
+
+  // Duration row
+  lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
+  lcdPrint(lcd, "Duration:", 20, 85);
+  for (int i = 0; i < 4; i++) {
+    int x = 20 + i * 195;
+    drawChip(lcd, x, 110, 180, 60, BOOK_DURATIONS[i], false);
+  }
+
+  // Purpose row
+  lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
+  lcdPrint(lcd, "Purpose:", 20, 195);
+  for (int i = 0; i < 5; i++) {
+    int x = 20 + i * 156;
+    drawChip(lcd, x, 220, 150, 60, BOOK_PURPOSES[i], false);
+  }
+
+  // Selection summary placeholder
+  lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
+  lcdPrint(lcd, "Pick a duration and a purpose, then Confirm.", 20, 310);
+
+  // Confirm + Cancel buttons
+  drawPanel(lcd, 260, 400, 280, 60, 60, 60, 60);  // disabled look until both picked
+  lcd->setBackColor(60, 60, 60); lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
+  lcdPrint(lcd, "Confirm", 340, 418);
+
+  drawPanel(lcd, 20, 400, 160, 60, 120, 20, 20);
+  lcd->setBackColor(120, 20, 20); lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
+  lcdPrint(lcd, "Cancel", 50, 418);
+  lcd->setBackColor(COL_BG);
+}
+
+// Called by the touch router after a chip tap. Updates the picker state and
+// repaints only the affected chip / confirm button (no full-screen redraw).
+void bookNowSelectDuration(UTFT* lcd, int8_t idx) {
+  if (idx < 0 || idx >= 4) return;
+  if (_selectedDurIdx == idx) return;
+  // Redraw the previously selected chip as unselected
+  if (_selectedDurIdx >= 0) {
+    int x = 20 + _selectedDurIdx * 195;
+    drawChip(lcd, x, 110, 180, 60, BOOK_DURATIONS[_selectedDurIdx], false);
+  }
+  _selectedDurIdx = idx;
+  int x = 20 + idx * 195;
+  drawChip(lcd, x, 110, 180, 60, BOOK_DURATIONS[idx], true);
+  bookNowRefreshConfirm(lcd);
+}
+
+void bookNowSelectPurpose(UTFT* lcd, int8_t idx) {
+  if (idx < 0 || idx >= 5) return;
+  if (_selectedPurposeIdx == idx) return;
+  if (_selectedPurposeIdx >= 0) {
+    int x = 20 + _selectedPurposeIdx * 156;
+    drawChip(lcd, x, 220, 150, 60, BOOK_PURPOSES[_selectedPurposeIdx], false);
+  }
+  _selectedPurposeIdx = idx;
+  int x = 20 + idx * 156;
+  drawChip(lcd, x, 220, 150, 60, BOOK_PURPOSES[idx], true);
+  bookNowRefreshConfirm(lcd);
+}
+
+void bookNowRefreshConfirm(UTFT* lcd) {
+  bool ready = (_selectedDurIdx >= 0 && _selectedPurposeIdx >= 0);
+  if (ready) drawPanel(lcd, 260, 400, 280, 60, 0, 140, 0);
+  else       drawPanel(lcd, 260, 400, 280, 60, 60, 60, 60);
+  lcd->setBackColor(ready ? 0 : 60, ready ? 140 : 60, ready ? 0 : 60);
+  lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
+  lcdPrint(lcd, "Confirm", 340, 418);
+  lcd->setBackColor(COL_BG);
+}
+
+int bookNowGetDurationMins() {
+  if (_selectedDurIdx < 0) return 0;
+  return BOOK_DURATION_MINS[_selectedDurIdx];
+}
+
+const char* bookNowGetPurpose() {
+  if (_selectedPurposeIdx < 0) return "";
+  return BOOK_PURPOSES[_selectedPurposeIdx];
+}
+
+bool bookNowIsReady() {
+  return (_selectedDurIdx >= 0 && _selectedPurposeIdx >= 0);
+}
+
+// ── PIN entry screen ──────────────────────────────────────────────────────────
+// 3x4 keypad:  1 2 3
+//              4 5 6
+//              7 8 9
+//              C 0 OK
+// Keys are 140x70 cells starting at x=230, y=100, with 10px gaps.
+// Entry display row: y=60..90 centered.
+
+static char _pinBuf[8] = {0};
+static uint8_t _pinLen = 0;
+#define PIN_MAX_LEN 6
+
+static void drawPinEntry(UTFT* lcd) {
+  drawPanel(lcd, 230, 60, 340, 30, COL_BG);
+  lcd->setBackColor(COL_BG); lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
+  char masked[PIN_MAX_LEN + 1] = {0};
+  for (uint8_t i = 0; i < _pinLen; i++) masked[i] = '*';
+  masked[_pinLen] = '\0';
+  int w = _pinLen * 16;
+  int x = 400 - w / 2;
+  lcd->print(masked[0] ? masked : "____", x, 65);
+}
+
+void displayPinScreen(UTFT* lcd) {
+  _pinLen = 0;
+  _pinBuf[0] = '\0';
+
+  lcd->clrScr(); lcd->setBackColor(COL_BG);
+  drawPanel(lcd, 0, 0, SCR_W, 50, COL_NAVY);
+  lcd->setColor(COL_WHITE); lcd->setBackColor(COL_NAVY);
+  lcd->setFont(BigFont); lcdPrint(lcd, "Admin PIN", 20, 12);
+  lcd->setBackColor(COL_BG);
+
+  drawPinEntry(lcd);
+
+  const char* keys[12] = {"1","2","3","4","5","6","7","8","9","C","0","OK"};
+  for (int row = 0; row < 4; row++) {
+    for (int col = 0; col < 3; col++) {
+      int idx = row * 3 + col;
+      int x = 230 + col * 150;
+      int y = 100 + row * 80;
+      uint8_t r = 0, g = 80, b = 160;
+      if (strcmp(keys[idx], "OK") == 0) { r = 0; g = 140; b = 0; }
+      else if (strcmp(keys[idx], "C") == 0) { r = 120; g = 20; b = 20; }
+      drawPanel(lcd, x, y, 140, 70, r, g, b);
+      lcd->setBackColor(r, g, b); lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
+      int labelW = strlen(keys[idx]) * 16;
+      int tx = x + (140 - labelW) / 2;
+      lcd->print(const_cast<char*>(keys[idx]), tx, y + 27);
+    }
+  }
+
+  drawPanel(lcd, 20, 100, 160, 70, 120, 20, 20);
+  lcd->setBackColor(120, 20, 20); lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
+  lcdPrint(lcd, "Cancel", 45, 127);
+  lcd->setBackColor(COL_BG);
+}
+
+void pinAppendDigit(UTFT* lcd, char d) {
+  if (_pinLen >= PIN_MAX_LEN) return;
+  _pinBuf[_pinLen++] = d;
+  _pinBuf[_pinLen]   = '\0';
+  drawPinEntry(lcd);
+}
+
+void pinClear(UTFT* lcd) {
+  _pinLen = 0;
+  _pinBuf[0] = '\0';
+  drawPinEntry(lcd);
+}
+
+const char* pinGetBuffer() {
+  return _pinBuf;
 }
 
 // ── Confirmation ──────────────────────────────────────────────────────────────

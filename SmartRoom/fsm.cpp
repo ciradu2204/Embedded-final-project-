@@ -21,6 +21,7 @@ void fsmAddBooking(const BookingSlot& incoming) {
   BookingSlot* existing = findSlot(incoming.bookingId);
   if (existing) {
     strlcpy(existing->occupantName, incoming.occupantName, sizeof(existing->occupantName));
+    strlcpy(existing->title,        incoming.title,        sizeof(existing->title));
     existing->startTime = incoming.startTime;
     existing->endTime   = incoming.endTime;
     existing->active    = true;
@@ -140,7 +141,7 @@ bool fsmIsRoomFreeNow() {
 
 // FIX (#2): walk-up booking now refuses to clobber an existing ACTIVE/PENDING
 // session. Returns false if rejected so the caller can show feedback.
-bool fsmCreateWalkUpBooking(const char* occupantName, uint16_t durationMins) {
+bool fsmCreateWalkUpBooking(const char* occupantName, uint16_t durationMins, const char* title) {
   if (!fsmIsRoomFreeNow()) {
     Serial.println(F("[FSM] Walk-up rejected: room not free."));
     return false;
@@ -151,18 +152,24 @@ bool fsmCreateWalkUpBooking(const char* occupantName, uint16_t durationMins) {
   memset(slot, 0, sizeof(*slot));
   snprintf(slot->bookingId, sizeof(slot->bookingId), "wu_%lu", (unsigned long)now);
   strlcpy(slot->occupantName, occupantName, sizeof(slot->occupantName));
+  strlcpy(slot->title, title ? title : "", sizeof(slot->title));
   slot->startTime      = now;
   slot->endTime        = now + (durationMins * 60);
   slot->state          = STATE_ACTIVE;
   slot->active         = true;
   slot->pendingStartMs = 0;
   slot->buzzerFired    = false;
-  Serial.printf("[FSM] Walk-up: %s for %u min\n", slot->bookingId, durationMins);
+  Serial.printf("[FSM] Walk-up: %s for %u min (%s)\n", slot->bookingId, durationMins, slot->title);
   FsmEvent evt;
+  memset(&evt, 0, sizeof(evt));
   evt.type = EVT_WALK_UP_BOOKING;
-  strlcpy(evt.bookingId, slot->bookingId, sizeof(evt.bookingId));
-  strlcpy(evt.roomId, ROOM_ID, sizeof(evt.roomId));
+  strlcpy(evt.bookingId,    slot->bookingId,    sizeof(evt.bookingId));
+  strlcpy(evt.roomId,       ROOM_ID,            sizeof(evt.roomId));
+  strlcpy(evt.title,        slot->title,        sizeof(evt.title));
+  strlcpy(evt.occupantName, slot->occupantName, sizeof(evt.occupantName));
   evt.timestamp = now;
+  evt.startTime = slot->startTime;
+  evt.endTime   = slot->endTime;
   eventQueuePush(evt);
   return true;
 }

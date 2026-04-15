@@ -3,7 +3,12 @@
 #include "touch_gt9271.h"
 #include <Arduino.h>
 
-static uint8_t     currentScreen = 0;
+// Admin PIN for walk-up bookings. Must match SmartRoom/config.h::ADMIN_PIN.
+// Keep the two values in sync manually — the Mega has no way to fetch it
+// from the ESP32 at runtime.
+#define MEGA_ADMIN_PIN "1234"
+
+static uint8_t         currentScreen = 0;
 static RoomDisplayData currentData;
 
 // Calendar slot storage — populated by CALSLOT commands
@@ -103,6 +108,8 @@ void handleIncomingCommand(UTFT* lcd) {
     if (currentScreen != 0) return;   // Ignore on sub-screens
     extractStr(buf, "room",  currentData.roomName,     sizeof(currentData.roomName));
     extractStr(buf, "occ",   currentData.occupantName, sizeof(currentData.occupantName));
+    currentData.title[0] = '\0';
+    extractStr(buf, "title", currentData.title,        sizeof(currentData.title));
     extractStr(buf, "start", currentData.startTime,    sizeof(currentData.startTime));
     extractStr(buf, "end",   currentData.endTime,      sizeof(currentData.endTime));
     currentData.state         = (uint8_t)extractInt(buf, "state");
@@ -126,7 +133,9 @@ void handleIncomingCommand(UTFT* lcd) {
       CalendarSlot& cs = calSlots[calSlotCount];
       cs.startSecs = (uint32_t)extractLong(buf, "s");
       cs.endSecs   = (uint32_t)extractLong(buf, "e");
-      extractStr(buf, "n", cs.name, sizeof(cs.name));
+      extractStr(buf, "n", cs.name,  sizeof(cs.name));
+      cs.title[0] = '\0';
+      extractStr(buf, "t", cs.title, sizeof(cs.title));
       cs.state  = (uint8_t)extractInt(buf, "st");
       cs.active = (cs.startSecs > 0);
       if (cs.active) calSlotCount++;
@@ -224,17 +233,19 @@ void sendTouchEvent(TouchPoint tp) {
         Serial2.print("{\"evt\":\"TOUCH\",\"gesture\":\"L\"}\n");
       } else if (gesture == GESTURE_TAP) {
         // FIX: BOOK NOW button is only drawn when the room is available
-        // (SCHEDULED / GHOST / COMPLETED). Previously the tap target stayed
-        // hot during ACTIVE/PENDING and the user could open the booking
-        // screen while a session was already in progress.
+        // (SCHEDULED / GHOST / COMPLETED).
         bool roomAvailable = (currentData.state == STATE_SCHEDULED ||
                               currentData.state == STATE_GHOST     ||
                               currentData.state == STATE_COMPLETED);
         if (roomAvailable &&
             downX >= 20 && downX <= 280 &&
             downY >= 230 && downY <= 300) {
-          Serial.println(F("[Touch] BOOK NOW"));
-          Serial2.print("{\"evt\":\"TOUCH\",\"gesture\":\"BOOKNOW\"}\n");
+          // Walk-up is admin-only: open the local PIN screen first.
+          if (_lcdPtr) {
+            currentScreen = 3;
+            reportScreen(3);
+            displayPinScreen(_lcdPtr);
+          }
         }
       }
     }
@@ -261,24 +272,87 @@ void sendTouchEvent(TouchPoint tp) {
       }
     }
     else if (currentScreen == 2) {
-      if (gesture == GESTURE_TAP) {
-        int dur = 0;
-        if (downY >= 130 && downY <= 230) {
-          if      (downX >= 40  && downX <= 240) dur = 15;
-          else if (downX >= 280 && downX <= 480) dur = 30;
-          else if (downX >= 520 && downX <= 720) dur = 60;
+      // Combined duration + purpose picker. Layout must match
+      // display_render.cpp::displayBookNowScreen().
+      if (gesture == GESTURE_TAP && _lcdPtr) {
+        // Duration row: y=110..170
+        if (downY >= 110 && downY <= 170) {
+          for (int i = 0; i < 4; i++) {
+            int x = 20 + i * 195;
+            if (downX >= x && downX <= x + 180) {
+              bookNowSelectDuration(_lcdPtr, (int8_t)i);
+              break;
+            }
+          }
         }
-
-        if (dur > 0) {
-          char out[64];
-          snprintf(out, sizeof(out), "{\"evt\":\"BOOK\",\"dur\":%d}\n", dur);
-          Serial2.print(out);
-        } else if (downY > 400) {
-          // Added back the local state reset so the UI jumps back snappily
+        // Purpose row: y=220..280
+        else if (downY >= 220 && downY <= 280) {
+          for (int i = 0; i < 5; i++) {
+            int x = 20 + i * 156;
+            if (downX >= x && downX <= x + 150) {
+              bookNowSelectPurpose(_lcdPtr, (int8_t)i);
+              break;
+            }
+          }
+        }
+        // Confirm button: x=260..540, y=400..460
+        else if (downX >= 260 && downX <= 540 &&
+                 downY >= 400 && downY <= 460) {
+          if (bookNowIsReady()) {
+            char out[96];
+            const char* purpose = bookNowGetPurpose();
+            snprintf(out, sizeof(out),
+                     "{\"evt\":\"BOOK\",\"dur\":%d,\"purpose\":\"%s\"}\n",
+                     bookNowGetDurationMins(), purpose);
+            Serial2.print(out);
+          }
+        }
+        // Cancel button: x=20..180, y=400..460
+        else if (downX >= 20 && downX <= 180 &&
+                 downY >= 400 && downY <= 460) {
           currentScreen = 0;
           reportScreen(0);
           resetStatusScreenCache();
           Serial2.print("{\"evt\":\"TOUCH\",\"gesture\":\"CANCEL\"}\n");
+        }
+      }
+    }
+    else if (currentScreen == 3) {
+      // PIN entry keypad. Layout must match display_render.cpp::displayPinScreen().
+      if (gesture == GESTURE_TAP && _lcdPtr) {
+        // Cancel button: x=20..180, y=100..170
+        if (downX >= 20 && downX <= 180 &&
+            downY >= 100 && downY <= 170) {
+          currentScreen = 0;
+          reportScreen(0);
+          resetStatusScreenCache();
+          Serial2.print("{\"evt\":\"TOUCH\",\"gesture\":\"CANCEL\"}\n");
+          return;
+        }
+        // 3x4 keypad starting at x=230, y=100, cells 140x70 with 10px gaps
+        if (downX >= 230 && downX <= 680 &&
+            downY >= 100 && downY <= 420) {
+          int col = (downX - 230) / 150;
+          int row = (downY - 100) / 80;
+          if (col < 0) col = 0; if (col > 2) col = 2;
+          if (row < 0) row = 0; if (row > 3) row = 3;
+          int idx = row * 3 + col;
+          const char* keys[12] = {"1","2","3","4","5","6","7","8","9","C","0","OK"};
+          const char* k = keys[idx];
+          if (strcmp(k, "C") == 0) {
+            pinClear(_lcdPtr);
+          } else if (strcmp(k, "OK") == 0) {
+            if (strcmp(pinGetBuffer(), MEGA_ADMIN_PIN) == 0) {
+              currentScreen = 2;
+              reportScreen(2);
+              displayBookNowScreen(_lcdPtr);
+            } else {
+              displayMessage(_lcdPtr, "Wrong PIN");
+              pinClear(_lcdPtr);
+            }
+          } else {
+            pinAppendDigit(_lcdPtr, k[0]);
+          }
         }
       }
     }

@@ -214,19 +214,37 @@ void mqttLoop() {
 bool mqttConnected() { return _mqtt.connected(); }
 
 void mqttPublishStatus(const FsmEvent& evt) {
-  // Backend (server/services/mqttBridge.js::handleRoomStatus) reads:
-  //   payload.state  ∈ {"active","ghost_released","completed"}
-  //   payload.timestamp (ISO string OR epoch — backend falls back to "now")
-  // Map our internal event vocabulary onto that contract so events are
-  // actually persisted instead of being logged as "Missing state".
+  // Walk-up events carry extra context (title, occupant, start/end) and go to
+  // a dedicated topic so the backend can INSERT a new booking row instead of
+  // trying to match an existing one. Everything else keeps the original
+  // {roomId, bookingId, state, timestamp} contract handled by
+  // mqttBridge.js::handleRoomStatus.
+  if (evt.type == EVT_WALK_UP_BOOKING) {
+    char payload[384];
+    snprintf(payload, sizeof(payload),
+             "{\"roomId\":\"%s\",\"bookingId\":\"%s\","
+             "\"title\":\"%s\",\"occupantName\":\"%s\","
+             "\"startTime\":%lu,\"endTime\":%lu,\"timestamp\":%lu}",
+             evt.roomId, evt.bookingId,
+             evt.title, evt.occupantName,
+             (unsigned long)evt.startTime,
+             (unsigned long)evt.endTime,
+             (unsigned long)evt.timestamp);
+    if (!_mqtt.publish(TOPIC_WALK_UP, payload, false)) {
+      Serial.println(F("[MQTT] Walk-up publish failed — re-queuing."));
+      eventQueuePush(evt);
+    } else {
+      Serial.printf("[MQTT] Walk-up published: %s\n", payload);
+    }
+    return;
+  }
+
   const char* state = "unknown";
   switch (evt.type) {
     case EVT_OCCUPANCY_CONFIRMED: state = "active";         break;
     case EVT_GHOST_RELEASED:      state = "ghost_released"; break;
     case EVT_SESSION_COMPLETED:   state = "completed";      break;
-    // Walk-up bookings have no exact backend equivalent — represent them
-    // as an "active" transition so the room is at least marked occupied.
-    case EVT_WALK_UP_BOOKING:     state = "active";         break;
+    default: break;
   }
   char payload[256];
   snprintf(payload, sizeof(payload),

@@ -24,6 +24,7 @@ struct CalendarSlot {
   uint32_t startSecs;   // Unix timestamp
   uint32_t endSecs;
   char     name[24];
+  char     title[24];   // booking purpose
   uint8_t  state;
   bool     active;
 };
@@ -31,6 +32,7 @@ struct CalendarSlot {
 struct RoomDisplayData {
   char     roomName[32];
   char     occupantName[32];
+  char     title[32];
   char     startTime[12];
   char     endTime[12];
   uint8_t  state;
@@ -52,6 +54,22 @@ void displayOfflineWarning(UTFT* lcd, bool show);
 
 // FIX (#6): toast-style transient message overlay (used for walk-up rejection).
 void displayMessage(UTFT* lcd, const char* text);
+
+// Book Now combined-picker state machine. The touch router calls the select
+// helpers when the user taps a chip; displayBookNowScreen() resets state.
+void bookNowSelectDuration(UTFT* lcd, int8_t idx);
+void bookNowSelectPurpose(UTFT* lcd, int8_t idx);
+void bookNowRefreshConfirm(UTFT* lcd);
+int         bookNowGetDurationMins();
+const char* bookNowGetPurpose();
+bool        bookNowIsReady();
+
+// Admin PIN screen. pinAppendDigit adds one char; pinClear resets;
+// pinGetBuffer returns the current entry for comparison.
+void        displayPinScreen(UTFT* lcd);
+void        pinAppendDigit(UTFT* lcd, char d);
+void        pinClear(UTFT* lcd);
+const char* pinGetBuffer();
 
 uint16_t    stateColour(uint8_t state);
 const char* stateLabel(uint8_t state);

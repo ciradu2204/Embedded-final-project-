@@ -16,7 +16,8 @@ BookingSlot* fsmGetSlots();
 
 // Walk-up booking: creates a local slot immediately, queues event for cloud sync.
 // FIX (#2): Returns false if rejected because the room is not currently free.
-bool fsmCreateWalkUpBooking(const char* occupantName, uint16_t durationMins);
+// `title` is the booking purpose (e.g. "Meeting", "Class") and may be NULL.
+bool fsmCreateWalkUpBooking(const char* occupantName, uint16_t durationMins, const char* title);
 
 // Get countdown in minutes to session end (0 if no active session)
 uint16_t fsmCountdownMins();
