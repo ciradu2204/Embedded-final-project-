@@ -18,6 +18,27 @@ void fsmInit() {
 }
 
 void fsmAddBooking(const BookingSlot& incoming) {
+  // Reject bookings whose end time has already passed — the backend
+  // sometimes re-publishes completed sessions via realtime UPDATE after
+  // handleRoomStatus fails to update their status in time, and without
+  // this guard the ESP32 would resurrect them as STATE_SCHEDULED and
+  // keep the LCD stuck on PENDING for the full grace period.
+  time_t nowKigali = time(nullptr) + 7200;
+  if (nowKigali > 1000000000L && incoming.endTime <= nowKigali) {
+    Serial.printf("[FSM] Ignoring past booking %s (end=%lu now=%lu)\n",
+                  incoming.bookingId,
+                  (unsigned long)incoming.endTime,
+                  (unsigned long)nowKigali);
+    // Also make sure any stale copy of this booking is not hanging around.
+    for (uint8_t i = 0; i < MAX_SLOTS; i++) {
+      if (strcmp(slots[i].bookingId, incoming.bookingId) == 0) {
+        slots[i].active = false;
+        slots[i].state  = STATE_COMPLETED;
+      }
+    }
+    return;
+  }
+
   BookingSlot* existing = findSlot(incoming.bookingId);
   if (existing) {
     strlcpy(existing->occupantName, incoming.occupantName, sizeof(existing->occupantName));
