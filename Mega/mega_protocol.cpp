@@ -2,6 +2,7 @@
 #include "display_render.h"
 #include "touch_gt9271.h"
 #include <Arduino.h>
+#include <time.h>
 
 // Admin PIN for walk-up bookings. Must match SmartRoom/config.h::ADMIN_PIN.
 // Keep the two values in sync manually — the Mega has no way to fetch it
