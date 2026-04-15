@@ -351,8 +351,16 @@ void displayCalendarBookings(UTFT* lcd, CalendarSlot* slots, uint8_t count, uint
     float yStart = topPx + ((startHour - topHour) + startMin / 60.0f) * CAL_ROW_HEIGHT;
     float yEnd   = topPx + ((endHour   - topHour) + endMin   / 60.0f) * CAL_ROW_HEIGHT;
 
+    Serial.print(F("[Draw] i=")); Serial.print(i);
+    Serial.print(F(" col="));     Serial.print(col);
+    Serial.print(F(" yS="));      Serial.print((int)yStart);
+    Serial.print(F(" yE="));      Serial.println((int)yEnd);
+
     // Clip to visible window
-    if (yEnd <= topPx || yStart >= bottomPx) continue;
+    if (yEnd <= topPx || yStart >= bottomPx) {
+      Serial.println(F("[Draw] clipped"));
+      continue;
+    }
     if (yStart < topPx)    yStart = topPx;
     if (yEnd   > bottomPx) yEnd   = bottomPx;
 

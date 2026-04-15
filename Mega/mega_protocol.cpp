@@ -139,12 +139,20 @@ void handleIncomingCommand(UTFT* lcd) {
       cs.state  = (uint8_t)extractInt(buf, "st");
       cs.active = (cs.startSecs > 0);
       if (cs.active) calSlotCount++;
+      Serial.print(F("[Cal] slot s=")); Serial.print(cs.startSecs);
+      Serial.print(F(" e="));           Serial.print(cs.endSecs);
+      Serial.print(F(" st="));          Serial.print(cs.state);
+      Serial.print(F(" n='"));          Serial.print(cs.name);
+      Serial.print(F("' count="));      Serial.println(calSlotCount);
+    } else {
+      Serial.println(F("[Cal] CALSLOT dropped: buffer full"));
     }
 
   } else if (strcmp(cmd, "CALDONE") == 0) {
-    // All CALSLOT packets received — auto-scroll so the earliest booking is
-    // visible (bookings at e.g. 19:00 would otherwise be clipped by the
-    // default 07:00 top hour), then draw.
+    Serial.print(F("[Cal] CALDONE received, count="));
+    Serial.print(calSlotCount);
+    Serial.print(F(" screen="));
+    Serial.println(currentScreen);
     if (currentScreen == 1) {
       uint8_t earliestHour = CAL_DAY_END_HOUR + 1;
       for (uint8_t i = 0; i < calSlotCount; i++) {
@@ -152,7 +160,14 @@ void handleIncomingCommand(UTFT* lcd) {
         time_t st = (time_t)calSlots[i].startSecs;
         time_t adjusted = (st > UNIX_OFFSET) ? (st - UNIX_OFFSET) : 0;
         struct tm* tmS = localtime(&adjusted);
-        if (!tmS) continue;
+        if (!tmS) {
+          Serial.print(F("[Cal] slot ")); Serial.print(i); Serial.println(F(": localtime NULL"));
+          continue;
+        }
+        Serial.print(F("[Cal] slot ")); Serial.print(i);
+        Serial.print(F(" tm_wday=")); Serial.print(tmS->tm_wday);
+        Serial.print(F(" tm_hour=")); Serial.print(tmS->tm_hour);
+        Serial.print(F(" tm_min="));  Serial.println(tmS->tm_min);
         if (tmS->tm_hour < earliestHour) earliestHour = tmS->tm_hour;
       }
       if (earliestHour <= CAL_DAY_END_HOUR) {
@@ -162,7 +177,9 @@ void handleIncomingCommand(UTFT* lcd) {
         if (target > maxTop)             target = maxTop;
         calTopHour = (uint8_t)target;
       }
+      Serial.print(F("[Cal] drawing topHour=")); Serial.println(calTopHour);
       displayCalendarBookings(lcd, calSlots, calSlotCount, calTopHour);
+      Serial.println(F("[Cal] draw done"));
     }
 
   } else if (strcmp(cmd, "MSG") == 0) {
