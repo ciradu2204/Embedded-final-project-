@@ -39,15 +39,21 @@ void setup() {
 }
 
 void loop() {
-  // 1. Check for commands arriving from ESP32 on Serial2
-  if (Serial2.available()) {
+  // 1. Drain every complete line currently in the Serial2 RX ring before
+  // touching touch. Mega's default HardwareSerial ring is only 64 bytes —
+  // a CALSLOT (~90B) + CALDONE (~22B) burst overflows it if we only
+  // process one line per loop(), so calendar data was being truncated and
+  // CALDONE lost entirely. handleIncomingCommand() already returns early
+  // when no complete line is buffered, so this loop is bounded by the
+  // number of completed lines present right now.
+  while (Serial2.available()) {
     handleIncomingCommand(&myGLCD);
   }
 
   // 2. Poll touch panel and forward any touch events to ESP32
   TouchPoint tp = touchRead();
-  
-  // VITAL FIX: No "if (tp.touched)" here! 
+
+  // VITAL FIX: No "if (tp.touched)" here!
   // It must run every loop so the protocol knows when you LIFT your finger.
   sendTouchEvent(tp);
 }
