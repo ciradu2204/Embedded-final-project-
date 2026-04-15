@@ -3,6 +3,20 @@
 #include <UTFT.h>
 #include "display_render.h"
 
+// avr-libc's time.h uses a Y2K epoch (2000-01-01), not the Unix epoch
+// (1970-01-01). Any time_t we receive from the ESP32 is a Unix epoch, so
+// we subtract UNIX_OFFSET before calling localtime() — otherwise the
+// resulting tm struct is ~30 years in the future, tm_wday is wrong, and
+// bookings never render on the calendar.
+#ifndef UNIX_OFFSET
+#define UNIX_OFFSET 946684800UL
+#endif
+
+static struct tm* calendarLocaltime(const time_t* t) {
+  time_t adjusted = (*t > UNIX_OFFSET) ? (*t - UNIX_OFFSET) : 0;
+  return localtime(&adjusted);
+}
+
 extern uint8_t BigFont[];
 extern uint8_t SmallFont[];
 
@@ -322,12 +336,12 @@ void displayCalendarBookings(UTFT* lcd, CalendarSlot* slots, uint8_t count, uint
     if (!slots[i].active) continue;
     time_t st = (time_t)slots[i].startSecs;
     time_t et = (time_t)slots[i].endSecs;
-    struct tm* tmS = localtime(&st);
+    struct tm* tmS = calendarLocaltime(&st);
     if (!tmS) continue;
     int dayOfWeek = tmS->tm_wday;
     int col = (dayOfWeek == 0) ? 6 : dayOfWeek - 1;
     int startHour = tmS->tm_hour, startMin = tmS->tm_min;
-    struct tm* tmE = localtime(&et);
+    struct tm* tmE = calendarLocaltime(&et);
     int endHour = tmE ? tmE->tm_hour : startHour + 1;
     int endMin  = tmE ? tmE->tm_min  : 0;
 
