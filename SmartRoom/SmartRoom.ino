@@ -26,6 +26,10 @@ static bool          _confirmPending    = false;
 static unsigned long _startupTimeMs     = 0;
 static bool          _startupDone       = false;
 static const uint32_t STARTUP_DELAY_MS  = 1500;
+// Set when the L gesture switches to the calendar screen so the next
+// hash-refresh tick sends CALSLOT/CALDONE unconditionally (otherwise the
+// slot fingerprint may be unchanged and nothing would fire).
+static bool          _calNeedFullSend   = false;
 
 static const uint32_t FSM_TICK_INTERVAL_MS     = 1000;
 static const uint32_t DISPLAY_SYNC_INTERVAL_MS = 1000;
@@ -121,11 +125,18 @@ void loop() {
       _confirmClearMs  = now;
 
     } else if (strcmp(touch.gesture, "L") == 0) {
-      // Send calendar screen command then immediately send booking data
+      // Switch the Mega to the calendar screen. The actual CALSLOT/CALDONE
+      // burst is driven by the 1 Hz hash-refresh loop below (it sees
+      // remote==1 on the next tick and sends fresh data). Doing both a
+      // direct send here AND the hash refresh was producing two colliding
+      // bursts that overflowed the Mega's 64B UART ring and dropped the
+      // CALSLOT / CALDONE packets mid-flight.
       megaSendCalendar();
       megaSetRemoteScreen(1);
-      delay(800);  // Small gap so Mega finishes drawing the grid before data arrives
-      megaSendCalendarData(fsmGetSlots(), MAX_SLOTS);
+      // Force the next hash-refresh tick to fire immediately with a fresh
+      // send, regardless of whether the slot fingerprint changed.
+      _lastDisplaySyncMs = 0;
+      _calNeedFullSend   = true;
 
     } else if (strcmp(touch.gesture, "R") == 0
             || strcmp(touch.gesture, "CANCEL") == 0) {
@@ -165,6 +176,9 @@ void loop() {
       // appear without the user having to leave and re-open the calendar.
       // Only resend when the slot fingerprint actually changes — avoids the
       // grid flicker that a per-second redraw would cause.
+      // Exception: the first tick after switching to the calendar always
+      // sends (tracked via _calNeedFullSend below) so the user sees content
+      // even if the slot table hasn't changed since the last viewing.
       static uint32_t lastCalHash = 0;
       uint32_t h = 2166136261u;
       BookingSlot* s = fsmGetSlots();
@@ -174,7 +188,8 @@ void loop() {
         h ^= (uint32_t)s[i].endTime;   h *= 16777619u;
         h ^= (uint32_t)s[i].state;     h *= 16777619u;
       }
-      if (h != lastCalHash) {
+      if (_calNeedFullSend || h != lastCalHash) {
+        _calNeedFullSend = false;
         lastCalHash = h;
         megaSendCalendarData(fsmGetSlots(), MAX_SLOTS);
       }
