@@ -23,6 +23,7 @@ void megaSendStatus(const char* roomName, uint8_t state,
 
 void megaSendCalendarData(BookingSlot* slots, uint8_t count);
 void megaSendCalendar();
+void megaSendCalReset();   // lightweight slot-buffer clear, no LCD redraw
 void megaSendBookNow();
 void megaSendConfirm(bool success);
 void megaSendOfflineWarning(bool show);

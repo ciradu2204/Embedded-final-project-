@@ -125,17 +125,14 @@ void loop() {
       _confirmClearMs  = now;
 
     } else if (strcmp(touch.gesture, "L") == 0) {
-      // Switch the Mega to the calendar screen and send data directly.
-      // megaSendCalendar() resets Mega's slot buffer, then we send the
-      // current slot table with byte-level pacing (see megaSendCalendarData).
-      //
-      // We also bump _lastDisplaySyncMs forward so the 1Hz hash-refresh
-      // doesn't fire again immediately and collide with this burst.
-      megaSendCalendar();
+      // The Mega has already switched to the calendar screen locally on
+      // swipe-left (cleared calSlotCount and drew the empty grid), so the
+      // ESP32 just needs to stream the current slot table. Arriving
+      // CALSLOT bytes land in an idle Mega ring without competing for
+      // cycles against clrScr / grid redraw.
       megaSetRemoteScreen(1);
-      delay(200);  // let the Mega process the CALENDAR reset before CALSLOTs
       megaSendCalendarData(fsmGetSlots(), MAX_SLOTS);
-      _lastDisplaySyncMs = now;    // suppress next tick
+      _lastDisplaySyncMs = now;    // suppress next 1Hz tick
       _calNeedFullSend   = false;
 
     } else if (strcmp(touch.gesture, "R") == 0
@@ -191,12 +188,12 @@ void loop() {
       if (_calNeedFullSend || h != lastCalHash) {
         _calNeedFullSend = false;
         lastCalHash = h;
-        // Reset the Mega's slot buffer before sending the new set — without
-        // this the Mega keeps appending and calSlotCount grows unbounded
-        // across refreshes, eventually hitting MAX_CAL_SLOTS and dropping
-        // real data.
-        megaSendCalendar();
-        delay(200);
+        // Lightweight slot-buffer reset (no LCD redraw) followed by the
+        // fresh set. The grid is already on screen, so we don't need the
+        // heavy clrScr path here — that was competing with the CALSLOT
+        // stream for Mega cycles and dropping bytes.
+        megaSendCalReset();
+        delay(30);
         megaSendCalendarData(fsmGetSlots(), MAX_SLOTS);
       }
     }

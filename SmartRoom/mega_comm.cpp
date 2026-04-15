@@ -132,6 +132,7 @@ void megaSendCalendarData(BookingSlot* slots, uint8_t count) {
 }
 
 void megaSendCalendar()   { MegaSerial.print("{\"cmd\":\"CALENDAR\"}\n"); }
+void megaSendCalReset()   { MegaSerial.print("{\"cmd\":\"CALRESET\"}\n"); }
 void megaSendBookNow()    { MegaSerial.print("{\"cmd\":\"BOOKNOW\"}\n"); }
 void megaSendStartup()    { MegaSerial.print("{\"cmd\":\"STARTUP\"}\n"); }
 

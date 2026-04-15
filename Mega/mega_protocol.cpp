@@ -131,6 +131,13 @@ void handleIncomingCommand(UTFT* lcd) {
     calTopHour   = CAL_DAY_START_HOUR;
     displayCalendarScreen(lcd, calTopHour);
 
+  } else if (strcmp(cmd, "CALRESET") == 0) {
+    // Lightweight "clear slot buffer" that skips the heavy clrScr redraw.
+    // Used by the 1Hz hash-refresh path on the ESP32 when it needs to
+    // resend fresh data but the calendar grid is already on screen.
+    memset(calSlots, 0, sizeof(calSlots));
+    calSlotCount = 0;
+
   } else if (strcmp(cmd, "CALSLOT") == 0) {
     // Receive one booking slot for the calendar
     if (calSlotCount < MAX_CAL_SLOTS) {
@@ -255,6 +262,20 @@ void sendTouchEvent(TouchPoint tp) {
 
     if (currentScreen == 0) {
       if (gesture == GESTURE_SWIPE_LEFT) {
+        // Switch to the calendar locally so the heavy LCD redraw
+        // (clrScr + grid + day strip) happens BEFORE the ESP32 starts
+        // streaming CALSLOT bytes. Otherwise the Mega is blocked in LCD
+        // work while the first CALSLOT lands in the 64B RX ring and gets
+        // truncated. The ESP32 still gets the "L" touch event and will
+        // stream fresh calendar data — but it arrives into an idle Mega.
+        if (_lcdPtr) {
+          memset(calSlots, 0, sizeof(calSlots));
+          calSlotCount = 0;
+          calTopHour   = CAL_DAY_START_HOUR;
+          currentScreen = 1;
+          reportScreen(1);
+          displayCalendarScreen(_lcdPtr, calTopHour);
+        }
         Serial2.print("{\"evt\":\"TOUCH\",\"gesture\":\"L\"}\n");
       } else if (gesture == GESTURE_TAP) {
         // FIX: BOOK NOW button is only drawn when the room is available
