@@ -254,22 +254,25 @@ void sendTouchEvent(TouchPoint tp) {
     }
     else if (currentScreen == 1) {
       // Calendar screen: vertical scrolling stays local for snappiness.
+      // Swipe jumps by a full visible page (8h); arrow taps jump 5h.
+      const int CAL_SWIPE_STEP = CAL_VISIBLE_ROWS;   // 8h, one full page
+      const int CAL_ARROW_STEP = 5;                   // 5h chunks on arrow tap
       if (_lcdPtr) {
         if (gesture == GESTURE_SWIPE_UP) {
           // Finger swiped up -> show later hours
-          scrollCalendar(_lcdPtr, +CAL_VISIBLE_ROWS / 2);
+          scrollCalendar(_lcdPtr, +CAL_SWIPE_STEP);
         } else if (gesture == GESTURE_SWIPE_DOWN) {
-          scrollCalendar(_lcdPtr, -CAL_VISIBLE_ROWS / 2);
+          scrollCalendar(_lcdPtr, -CAL_SWIPE_STEP);
         } else if (gesture == GESTURE_TAP) {
           // Up arrow tap target
           if (downX >= 740 && downX <= 790 &&
               downY >= 65  && downY <= 90) {
-            scrollCalendar(_lcdPtr, -1);
+            scrollCalendar(_lcdPtr, -CAL_ARROW_STEP);
           }
           // Down arrow tap target
           else if (downX >= 740 && downX <= 790 &&
                    downY >= 442 && downY <= 475) {
-            scrollCalendar(_lcdPtr, +1);
+            scrollCalendar(_lcdPtr, +CAL_ARROW_STEP);
           }
         }
       }
