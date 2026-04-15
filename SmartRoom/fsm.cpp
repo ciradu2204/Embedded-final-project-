@@ -140,15 +140,34 @@ bool fsmIsRoomFreeNow() {
 }
 
 // FIX (#2): walk-up booking now refuses to clobber an existing ACTIVE/PENDING
-// session. Returns false if rejected so the caller can show feedback.
+// session AND refuses if its [now, end] window would overlap any future
+// SCHEDULED booking. Returns false if rejected so the caller can show feedback.
 bool fsmCreateWalkUpBooking(const char* occupantName, uint16_t durationMins, const char* title) {
   if (!fsmIsRoomFreeNow()) {
     Serial.println(F("[FSM] Walk-up rejected: room not free."));
     return false;
   }
+  time_t now      = time(nullptr) + 7200; // 2 hour offset for Kigali
+  time_t proposedStart = now;
+  time_t proposedEnd   = now + (time_t)(durationMins * 60);
+
+  // Refuse if the proposed window overlaps any slot we already know about.
+  // Two intervals [a, b) and [c, d) overlap iff a < d && c < b.
+  for (uint8_t i = 0; i < MAX_SLOTS; i++) {
+    if (!slots[i].active) continue;
+    // Only consider upcoming / live bookings
+    if (slots[i].state == STATE_GHOST || slots[i].state == STATE_COMPLETED) continue;
+    if (proposedStart < slots[i].endTime && slots[i].startTime < proposedEnd) {
+      Serial.printf("[FSM] Walk-up rejected: overlaps %s (%lu..%lu)\n",
+                    slots[i].bookingId,
+                    (unsigned long)slots[i].startTime,
+                    (unsigned long)slots[i].endTime);
+      return false;
+    }
+  }
+
   BookingSlot* slot = findFreeSlot();
   if (!slot) { Serial.println(F("[FSM] No free slot for walk-up.")); return false; }
-  time_t now = time(nullptr) + 7200; // 2 hour offset for Kigali
   memset(slot, 0, sizeof(*slot));
   snprintf(slot->bookingId, sizeof(slot->bookingId), "wu_%lu", (unsigned long)now);
   strlcpy(slot->occupantName, occupantName, sizeof(slot->occupantName));
