@@ -143,11 +143,19 @@ bool fsmIsRoomFreeNow() {
 // session AND refuses if its [now, end] window would overlap any future
 // SCHEDULED booking. Returns false if rejected so the caller can show feedback.
 bool fsmCreateWalkUpBooking(const char* occupantName, uint16_t durationMins, const char* title) {
+  // Refuse if NTP hasn't synced yet — otherwise time(nullptr) is near-zero
+  // and the booking lands at 1970-01-01, making it invisible on the
+  // dashboard (end_time < now filters it out immediately).
+  time_t rawNow = time(nullptr);
+  if (rawNow < 1000000000L) {
+    Serial.println(F("[FSM] Walk-up rejected: clock not synced yet."));
+    return false;
+  }
   if (!fsmIsRoomFreeNow()) {
     Serial.println(F("[FSM] Walk-up rejected: room not free."));
     return false;
   }
-  time_t now      = time(nullptr) + 7200; // 2 hour offset for Kigali
+  time_t now      = rawNow + 7200; // 2 hour offset for Kigali
   time_t proposedStart = now;
   time_t proposedEnd   = now + (time_t)(durationMins * 60);
 
