@@ -332,12 +332,17 @@ void displayCalendarBookings(UTFT* lcd, CalendarSlot* slots, uint8_t count, uint
   float topPx    = (float)CAL_GRID_TOP_Y;
   float bottomPx = (float)CAL_GRID_BOTTOM_Y;
 
+  Serial.print(F("[Render] drawing "));
+  Serial.print(count);
+  Serial.print(F(" slots, topHour="));
+  Serial.println(topHour);
+
   for (uint8_t i = 0; i < count; i++) {
     if (!slots[i].active) continue;
     time_t st = (time_t)slots[i].startSecs;
     time_t et = (time_t)slots[i].endSecs;
     struct tm* tmS = calendarLocaltime(&st);
-    if (!tmS) continue;
+    if (!tmS) { Serial.println(F("[Render] tmS null, skip")); continue; }
     int dayOfWeek = tmS->tm_wday;
     int col = (dayOfWeek == 0) ? 6 : dayOfWeek - 1;
     int startHour = tmS->tm_hour, startMin = tmS->tm_min;
@@ -348,8 +353,27 @@ void displayCalendarBookings(UTFT* lcd, CalendarSlot* slots, uint8_t count, uint
     float yStart = topPx + ((startHour - topHour) + startMin / 60.0f) * CAL_ROW_HEIGHT;
     float yEnd   = topPx + ((endHour   - topHour) + endMin   / 60.0f) * CAL_ROW_HEIGHT;
 
+    Serial.print(F("[Render] slot "));
+    Serial.print(i);
+    Serial.print(F(": wday="));
+    Serial.print(dayOfWeek);
+    Serial.print(F(" col="));
+    Serial.print(col);
+    Serial.print(F(" start="));
+    Serial.print(startHour);
+    Serial.print(F(":"));
+    Serial.print(startMin);
+    Serial.print(F(" end="));
+    Serial.print(endHour);
+    Serial.print(F(":"));
+    Serial.print(endMin);
+    Serial.print(F(" yS="));
+    Serial.print((int)yStart);
+    Serial.print(F(" yE="));
+    Serial.println((int)yEnd);
+
     // Clip to visible window
-    if (yEnd <= topPx || yStart >= bottomPx) continue;
+    if (yEnd <= topPx || yStart >= bottomPx) { Serial.println(F("[Render] clipped")); continue; }
     if (yStart < topPx)    yStart = topPx;
     if (yEnd   > bottomPx) yEnd   = bottomPx;
 

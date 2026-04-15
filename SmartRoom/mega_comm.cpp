@@ -99,7 +99,7 @@ void megaSendStatus(const char* roomName, uint8_t state,
 // Send calendar booking data to Mega for display on calendar screen.
 // Sends up to 'count' slots. Each slot has start/end Unix timestamps and name.
 void megaSendCalendarData(BookingSlot* slots, uint8_t count) {
-  // Send each active slot as a separate CALSLOT command to keep packet size small
+  uint8_t sent = 0;
   for (uint8_t i = 0; i < MAX_SLOTS; i++) {
     if (!slots[i].active) continue;
     if (slots[i].state == STATE_COMPLETED || slots[i].state == STATE_GHOST) continue;
@@ -111,10 +111,12 @@ void megaSendCalendarData(BookingSlot* slots, uint8_t count) {
              slots[i].occupantName,
              (uint8_t)slots[i].state);
     MegaSerial.print(buf);
-    delay(30);  // Small gap between slots to avoid overwhelming Mega's serial buffer
+    Serial.printf("[CalSend] slot %u: %s", i, buf);
+    sent++;
+    delay(30);
   }
-  // Send CALDONE to signal end of data
   MegaSerial.print("{\"cmd\":\"CALDONE\"}\n");
+  Serial.printf("[CalSend] CALDONE sent (%u slot(s))\n", sent);
 }
 
 void megaSendCalendar()   { MegaSerial.print("{\"cmd\":\"CALENDAR\"}\n"); }
