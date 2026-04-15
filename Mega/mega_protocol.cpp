@@ -125,7 +125,6 @@ void handleIncomingCommand(UTFT* lcd) {
     calSlotCount = 0;
     calTopHour   = CAL_DAY_START_HOUR;
     displayCalendarScreen(lcd, calTopHour);
-    Serial.println(F("[Cal] CALENDAR open, slots cleared"));
 
   } else if (strcmp(cmd, "CALSLOT") == 0) {
     // Receive one booking slot for the calendar
@@ -139,24 +138,10 @@ void handleIncomingCommand(UTFT* lcd) {
       cs.state  = (uint8_t)extractInt(buf, "st");
       cs.active = (cs.startSecs > 0);
       if (cs.active) calSlotCount++;
-      Serial.print(F("[Cal] CALSLOT s="));
-      Serial.print(cs.startSecs);
-      Serial.print(F(" e="));
-      Serial.print(cs.endSecs);
-      Serial.print(F(" st="));
-      Serial.print(cs.state);
-      Serial.print(F(" count="));
-      Serial.println(calSlotCount);
-    } else {
-      Serial.println(F("[Cal] CALSLOT dropped (buffer full)"));
     }
 
   } else if (strcmp(cmd, "CALDONE") == 0) {
     // All CALSLOT packets received — draw the bookings on the calendar
-    Serial.print(F("[Cal] CALDONE received, drawing "));
-    Serial.print(calSlotCount);
-    Serial.print(F(" slots on screen "));
-    Serial.println(currentScreen);
     if (currentScreen == 1) {
       displayCalendarBookings(lcd, calSlots, calSlotCount, calTopHour);
     }
