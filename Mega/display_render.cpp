@@ -3,14 +3,8 @@
 #include <UTFT.h>
 #include "display_render.h"
 
-// avr-libc's time.h uses a Y2K epoch (2000-01-01), not the Unix epoch
-// (1970-01-01). Any time_t we receive from the ESP32 is a Unix epoch, so
-// we subtract UNIX_OFFSET before calling localtime() — otherwise the
-// resulting tm struct is ~30 years in the future, tm_wday is wrong, and
-// bookings never render on the calendar.
-#ifndef UNIX_OFFSET
-#define UNIX_OFFSET 946684800UL
-#endif
+// UNIX_OFFSET now lives in display_render.h so both the render code and
+// the touch/protocol layer can share it.
 
 static struct tm* calendarLocaltime(const time_t* t) {
   time_t adjusted = (*t > UNIX_OFFSET) ? (*t - UNIX_OFFSET) : 0;

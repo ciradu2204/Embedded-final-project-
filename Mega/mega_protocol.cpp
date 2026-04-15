@@ -141,8 +141,26 @@ void handleIncomingCommand(UTFT* lcd) {
     }
 
   } else if (strcmp(cmd, "CALDONE") == 0) {
-    // All CALSLOT packets received — draw the bookings on the calendar
+    // All CALSLOT packets received — auto-scroll so the earliest booking is
+    // visible (bookings at e.g. 19:00 would otherwise be clipped by the
+    // default 07:00 top hour), then draw.
     if (currentScreen == 1) {
+      uint8_t earliestHour = CAL_DAY_END_HOUR + 1;
+      for (uint8_t i = 0; i < calSlotCount; i++) {
+        if (!calSlots[i].active) continue;
+        time_t st = (time_t)calSlots[i].startSecs;
+        time_t adjusted = (st > UNIX_OFFSET) ? (st - UNIX_OFFSET) : 0;
+        struct tm* tmS = localtime(&adjusted);
+        if (!tmS) continue;
+        if (tmS->tm_hour < earliestHour) earliestHour = tmS->tm_hour;
+      }
+      if (earliestHour <= CAL_DAY_END_HOUR) {
+        int maxTop = CAL_DAY_END_HOUR - CAL_VISIBLE_ROWS + 1;
+        int target = earliestHour;
+        if (target < CAL_DAY_START_HOUR) target = CAL_DAY_START_HOUR;
+        if (target > maxTop)             target = maxTop;
+        calTopHour = (uint8_t)target;
+      }
       displayCalendarBookings(lcd, calSlots, calSlotCount, calTopHour);
     }
 

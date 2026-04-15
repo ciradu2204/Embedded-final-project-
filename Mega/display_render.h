@@ -4,6 +4,12 @@
 #include <Arduino.h>
 #include <UTFT.h>
 
+// avr-libc uses a Y2K epoch (2000-01-01) while the ESP32 sends Unix epochs
+// (1970-01-01). Subtract this before calling localtime() on the Mega.
+#ifndef UNIX_OFFSET
+#define UNIX_OFFSET 946684800UL
+#endif
+
 #define STATE_SCHEDULED   0
 #define STATE_PENDING     1
 #define STATE_ACTIVE      2
