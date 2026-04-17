@@ -46,7 +46,7 @@ uint16_t stateColour(uint8_t state) {
 
 const char* stateLabel(uint8_t state) {
   switch (state) {
-    case STATE_SCHEDULED: return "AVAILABLE";
+    case STATE_SCHEDULED: return "RESERVED";
     case STATE_PENDING:   return "PENDING";
     case STATE_ACTIVE:    return "IN USE";
     case STATE_GHOST:
@@ -117,16 +117,16 @@ void displayStatusScreen(UTFT* lcd, RoomDisplayData* d) {
     lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
     lcdPrint(lcd, "Swipe left: calendar", 530, 50);
 
-    bool available = (d->state == STATE_SCHEDULED ||
-                      d->state == STATE_GHOST      ||
-                      d->state == STATE_COMPLETED);
+    // SCHEDULED, PENDING and ACTIVE all mean "a booking exists" — show the
+    // occupied/reserved panel and the session details, not BOOK NOW.
+    bool available = (d->state == STATE_GHOST || d->state == STATE_COMPLETED);
     if (available) { drawPanel(lcd, 20, 90, 360, 120, 0, 140, 0);   lcd->setBackColor(0, 140, 0); }
     else           { drawPanel(lcd, 20, 90, 360, 120, 180, 20, 20); lcd->setBackColor(180, 20, 20); }
     lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
     lcdPrint(lcd, stateLabel(d->state), 30, 130);
     lcd->setBackColor(COL_BG);
 
-    if (d->state == STATE_ACTIVE || d->state == STATE_PENDING) {
+    if (d->state == STATE_ACTIVE || d->state == STATE_PENDING || d->state == STATE_SCHEDULED) {
       lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
       lcdPrint(lcd, "Booked by:", 20, 220);
       lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
@@ -155,7 +155,7 @@ void displayStatusScreen(UTFT* lcd, RoomDisplayData* d) {
       lcdPrint(lcd, "Tap to reserve this room", 20, 320);
     }
 
-    bool avail2 = (d->state == STATE_SCHEDULED || d->state == STATE_GHOST || d->state == STATE_COMPLETED);
+    bool avail2 = (d->state == STATE_GHOST || d->state == STATE_COMPLETED);
     lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
     lcdPrint(lcd, "LED indicator:", 430, 100);
     if (avail2) { lcd->setColor(COL_GREEN); lcdPrint(lcd, "GREEN  (available)", 430, 118); }

@@ -316,10 +316,10 @@ void sendTouchEvent(TouchPoint tp) {
         }
         Serial2.print("{\"evt\":\"TOUCH\",\"gesture\":\"L\"}\n");
       } else if (gesture == GESTURE_TAP) {
-        // FIX: BOOK NOW button is only drawn when the room is available
-        // (SCHEDULED / GHOST / COMPLETED).
-        bool roomAvailable = (currentData.state == STATE_SCHEDULED ||
-                              currentData.state == STATE_GHOST     ||
+        // BOOK NOW is only drawn when the room is truly free (no scheduled,
+        // pending, or active booking). SCHEDULED means a reservation is
+        // already on the calendar for this slot — walk-up must be refused.
+        bool roomAvailable = (currentData.state == STATE_GHOST ||
                               currentData.state == STATE_COMPLETED);
         if (roomAvailable &&
             downX >= 20 && downX <= 280 &&
