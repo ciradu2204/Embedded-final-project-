@@ -294,12 +294,36 @@ static void drawCalendarArrows(UTFT* lcd, uint8_t topHour) {
   lcd->print(range, 10, CAL_ARROW_DN_Y + 12);
 }
 
-void displayCalendarScreen(UTFT* lcd, uint8_t topHour) {
+void displayCalendarScreen(UTFT* lcd, uint8_t topHour, uint32_t weekStart, uint32_t weekEnd) {
   lcd->clrScr();
   lcd->setBackColor(COL_BG);
   drawPanel(lcd, 0, 0, SCR_W, 60, COL_NAVY);
   lcd->setColor(COL_WHITE); lcd->setBackColor(COL_NAVY);
-  lcd->setFont(BigFont); lcdPrint(lcd, "This Week", 20, 15);
+  lcd->setFont(BigFont);
+
+  // Show "DD Mon – DD Mon" range if weekStart is valid, else "This Week"
+  if (weekStart > 0) {
+    static const char* MON_ABR[12] = {"Jan","Feb","Mar","Apr","May","Jun",
+                                       "Jul","Aug","Sep","Oct","Nov","Dec"};
+    time_t ws = (time_t)weekStart;
+    time_t we = (time_t)weekEnd;
+    ws = (ws > UNIX_OFFSET) ? (ws - UNIX_OFFSET) : 0;
+    we = (we > UNIX_OFFSET) ? (we - UNIX_OFFSET) : 0;
+    struct tm* tms = localtime(&ws);
+    struct tm* tme = localtime(&we);
+    char hdr[40];
+    if (tms && tme) {
+      snprintf(hdr, sizeof(hdr), "%d %s - %d %s",
+               tms->tm_mday, MON_ABR[tms->tm_mon],
+               tme->tm_mday, MON_ABR[tme->tm_mon]);
+    } else {
+      strcpy(hdr, "This Week");
+    }
+    lcdPrint(lcd, hdr, 20, 15);
+  } else {
+    lcdPrint(lcd, "This Week", 20, 15);
+  }
+
   lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
   lcdPrint(lcd, "Swipe right to go back", 500, 38);
 
@@ -318,7 +342,8 @@ void displayCalendarScreen(UTFT* lcd, uint8_t topHour) {
   lcdPrint(lcd, "Loading bookings...", CENTER, CAL_ARROW_DN_Y + 12);
 }
 
-void displayCalendarBookings(UTFT* lcd, CalendarSlot* slots, uint8_t count, uint8_t topHour) {
+void displayCalendarBookings(UTFT* lcd, CalendarSlot* slots, uint8_t count,
+                             uint8_t topHour, uint32_t weekStart, uint32_t weekEnd) {
   // Clear grid area + footer hint, then redraw grid lines
   drawPanel(lcd, 0, CAL_GRID_TOP_Y, SCR_W, CAL_GRID_BOTTOM_Y - CAL_GRID_TOP_Y, COL_BG);
   drawCalendarHourGrid(lcd, topHour);
@@ -337,6 +362,11 @@ void displayCalendarBookings(UTFT* lcd, CalendarSlot* slots, uint8_t count, uint
 
   for (uint8_t i = 0; i < count; i++) {
     if (!slots[i].active) continue;
+    // Skip bookings outside the current week when we have a valid week window.
+    // weekStart == 0 means the ESP32 clock hasn't synced yet — show everything.
+    if (weekStart > 0 && weekEnd > weekStart) {
+      if (slots[i].startSecs < weekStart || slots[i].startSecs > weekEnd) continue;
+    }
     time_t st = (time_t)slots[i].startSecs;
     time_t et = (time_t)slots[i].endSecs;
     struct tm* tmS = calendarLocaltime(&st);

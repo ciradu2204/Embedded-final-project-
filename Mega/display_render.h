@@ -52,8 +52,13 @@ void displayStatusScreen(UTFT* lcd, RoomDisplayData* d);
 
 // Calendar grid: drawn once when the user opens the calendar screen.
 // `topHour` is the first hour shown at the top of the visible window.
-void displayCalendarScreen(UTFT* lcd, uint8_t topHour);
-void displayCalendarBookings(UTFT* lcd, CalendarSlot* slots, uint8_t count, uint8_t topHour);
+// weekStart / weekEnd are Unix timestamps (Kigali time) for Monday 00:00 and
+// Sunday 23:59:59 of the week being displayed. Slots outside this window are
+// skipped so next-week bookings don't bleed into the current-week grid.
+// Pass 0 for both to show all slots (fallback when clock is not yet synced).
+void displayCalendarScreen(UTFT* lcd, uint8_t topHour, uint32_t weekStart, uint32_t weekEnd);
+void displayCalendarBookings(UTFT* lcd, CalendarSlot* slots, uint8_t count,
+                             uint8_t topHour, uint32_t weekStart, uint32_t weekEnd);
 
 void displayBookNowScreen(UTFT* lcd);
 void displayConfirmation(UTFT* lcd, bool success);

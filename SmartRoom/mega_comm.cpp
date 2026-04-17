@@ -1,5 +1,6 @@
 #include "mega_comm.h"
 #include "config.h"
+#include <time.h>
 
 #define MegaSerial Serial2
 
@@ -128,7 +129,10 @@ void megaSendCalendarData(BookingSlot* slots, uint8_t count) {
     }
     delay(120);
   }
-  MegaSerial.print("{\"cmd\":\"CALDONE\"}\n");
+  char doneBuf[64];
+  snprintf(doneBuf, sizeof(doneBuf), "{\"cmd\":\"CALDONE\",\"now\":%lu}\n",
+           (unsigned long)(time(nullptr) + 7200));
+  MegaSerial.print(doneBuf);
 }
 
 void megaSendCalendar()   { MegaSerial.print("{\"cmd\":\"CALENDAR\"}\n"); }

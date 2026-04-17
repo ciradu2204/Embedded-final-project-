@@ -20,10 +20,16 @@ static uint8_t      calSlotCount = 0;
 // so that swipe/arrow scrolling sticks while CALSLOT data trickles in.
 static uint8_t      calTopHour    = CAL_DAY_START_HOUR;
 
+// Current-week bounds sent by the ESP32 in CALDONE. Used to filter slots in
+// displayCalendarBookings so next-week bookings don't appear in this week's grid.
+// Both are 0 until the first CALDONE arrives (= show all, no filter).
+static uint32_t     calWeekStart  = 0;
+static uint32_t     calWeekEnd    = 0;
+
 // Helper: redraw calendar with current slot buffer at current scroll offset
 static void redrawCalendar(UTFT* lcd) {
-  displayCalendarScreen(lcd, calTopHour);
-  displayCalendarBookings(lcd, calSlots, calSlotCount, calTopHour);
+  displayCalendarScreen(lcd, calTopHour, calWeekStart, calWeekEnd);
+  displayCalendarBookings(lcd, calSlots, calSlotCount, calTopHour, calWeekStart, calWeekEnd);
 }
 
 static void scrollCalendar(UTFT* lcd, int delta) {
@@ -127,9 +133,11 @@ void handleIncomingCommand(UTFT* lcd) {
     memset(calSlots, 0, sizeof(calSlots));
     currentScreen = 1;
     reportScreen(1);
-    calSlotCount = 0;
-    calTopHour   = CAL_DAY_START_HOUR;
-    displayCalendarScreen(lcd, calTopHour);
+    calSlotCount  = 0;
+    calTopHour    = CAL_DAY_START_HOUR;
+    calWeekStart  = 0;
+    calWeekEnd    = 0;
+    displayCalendarScreen(lcd, calTopHour, calWeekStart, calWeekEnd);
 
   } else if (strcmp(cmd, "CALRESET") == 0) {
     // Lightweight "clear slot buffer" that skips the heavy clrScr redraw.
@@ -165,9 +173,37 @@ void handleIncomingCommand(UTFT* lcd) {
     Serial.print(F(" screen="));
     Serial.println(currentScreen);
     if (currentScreen == 1) {
+      // Compute this week's Monday 00:00 and Sunday 23:59:59 from the ESP32 now.
+      long nowSecs = extractLong(buf, "now");
+      if (nowSecs > 1000000000L) {
+        // nowSecs is Kigali local time (Unix + 7200). Compute Monday of this week.
+        // tm_wday: 0=Sun, 1=Mon, ..., 6=Sat. Days since Monday = (wday+6)%7.
+        time_t nowT = (time_t)nowSecs;
+        time_t nowAdj = (nowT > UNIX_OFFSET) ? (nowT - UNIX_OFFSET) : 0;
+        struct tm* tn = localtime(&nowAdj);
+        if (tn) {
+          int daysSinceMon = (tn->tm_wday + 6) % 7;
+          // Strip to midnight of today (avr), then subtract extra days
+          struct tm monMid = *tn;
+          monMid.tm_hour = 0; monMid.tm_min = 0; monMid.tm_sec = 0;
+          time_t monAdj = mktime(&monMid) - (time_t)(daysSinceMon * 86400UL);
+          // Convert back to Unix (Kigali) timestamps for the filter
+          calWeekStart = (uint32_t)(monAdj + UNIX_OFFSET);
+          calWeekEnd   = calWeekStart + 7 * 86400UL - 1;
+          Serial.print(F("[Cal] weekStart=")); Serial.print(calWeekStart);
+          Serial.print(F(" weekEnd="));        Serial.println(calWeekEnd);
+          // Redraw header with week dates now that we have valid bounds
+          displayCalendarScreen(lcd, calTopHour, calWeekStart, calWeekEnd);
+        }
+      }
+
       uint8_t earliestHour = CAL_DAY_END_HOUR + 1;
       for (uint8_t i = 0; i < calSlotCount; i++) {
         if (!calSlots[i].active) continue;
+        // Only consider slots within this week for auto-scroll target
+        if (calWeekStart > 0 && calWeekEnd > calWeekStart) {
+          if (calSlots[i].startSecs < calWeekStart || calSlots[i].startSecs > calWeekEnd) continue;
+        }
         time_t st = (time_t)calSlots[i].startSecs;
         time_t adjusted = (st > UNIX_OFFSET) ? (st - UNIX_OFFSET) : 0;
         struct tm* tmS = localtime(&adjusted);
@@ -189,7 +225,7 @@ void handleIncomingCommand(UTFT* lcd) {
         calTopHour = (uint8_t)target;
       }
       Serial.print(F("[Cal] drawing topHour=")); Serial.println(calTopHour);
-      displayCalendarBookings(lcd, calSlots, calSlotCount, calTopHour);
+      displayCalendarBookings(lcd, calSlots, calSlotCount, calTopHour, calWeekStart, calWeekEnd);
       Serial.println(F("[Cal] draw done"));
     }
 
@@ -270,11 +306,13 @@ void sendTouchEvent(TouchPoint tp) {
         // stream fresh calendar data — but it arrives into an idle Mega.
         if (_lcdPtr) {
           memset(calSlots, 0, sizeof(calSlots));
-          calSlotCount = 0;
-          calTopHour   = CAL_DAY_START_HOUR;
+          calSlotCount  = 0;
+          calTopHour    = CAL_DAY_START_HOUR;
+          calWeekStart  = 0;
+          calWeekEnd    = 0;
           currentScreen = 1;
           reportScreen(1);
-          displayCalendarScreen(_lcdPtr, calTopHour);
+          displayCalendarScreen(_lcdPtr, calTopHour, calWeekStart, calWeekEnd);
         }
         Serial2.print("{\"evt\":\"TOUCH\",\"gesture\":\"L\"}\n");
       } else if (gesture == GESTURE_TAP) {
