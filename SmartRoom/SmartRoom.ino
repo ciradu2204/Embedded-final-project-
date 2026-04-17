@@ -30,6 +30,23 @@ static const uint32_t STARTUP_DELAY_MS  = 1500;
 // hash-refresh tick sends CALSLOT/CALDONE unconditionally (otherwise the
 // slot fingerprint may be unchanged and nothing would fire).
 static bool          _calNeedFullSend   = false;
+// Fingerprint of the slot table last sent to the Mega. The 1Hz hash-refresh
+// only resends when this changes. The L-handler updates this after its
+// initial send so the refresh tick doesn't immediately CALRESET + resend
+// identical data (which caused a visible wipe on the first swipe).
+static uint32_t      _lastCalHash       = 0;
+
+static uint32_t computeCalHash() {
+  uint32_t h = 2166136261u;
+  BookingSlot* s = fsmGetSlots();
+  for (uint8_t i = 0; i < MAX_SLOTS; i++) {
+    if (!s[i].active) continue;
+    h ^= (uint32_t)s[i].startTime; h *= 16777619u;
+    h ^= (uint32_t)s[i].endTime;   h *= 16777619u;
+    h ^= (uint32_t)s[i].state;     h *= 16777619u;
+  }
+  return h;
+}
 
 static const uint32_t FSM_TICK_INTERVAL_MS     = 1000;
 static const uint32_t DISPLAY_SYNC_INTERVAL_MS = 1000;
@@ -144,6 +161,7 @@ void loop() {
       megaSendCalendarData(fsmGetSlots(), MAX_SLOTS);
       _lastDisplaySyncMs = now;    // suppress next 1Hz tick
       _calNeedFullSend   = false;
+      _lastCalHash       = computeCalHash();  // skip redundant refresh
 
     } else if (strcmp(touch.gesture, "R") == 0
             || strcmp(touch.gesture, "CANCEL") == 0) {
@@ -183,21 +201,10 @@ void loop() {
       // appear without the user having to leave and re-open the calendar.
       // Only resend when the slot fingerprint actually changes — avoids the
       // grid flicker that a per-second redraw would cause.
-      // Exception: the first tick after switching to the calendar always
-      // sends (tracked via _calNeedFullSend below) so the user sees content
-      // even if the slot table hasn't changed since the last viewing.
-      static uint32_t lastCalHash = 0;
-      uint32_t h = 2166136261u;
-      BookingSlot* s = fsmGetSlots();
-      for (uint8_t i = 0; i < MAX_SLOTS; i++) {
-        if (!s[i].active) continue;
-        h ^= (uint32_t)s[i].startTime; h *= 16777619u;
-        h ^= (uint32_t)s[i].endTime;   h *= 16777619u;
-        h ^= (uint32_t)s[i].state;     h *= 16777619u;
-      }
-      if (_calNeedFullSend || h != lastCalHash) {
+      uint32_t h = computeCalHash();
+      if (_calNeedFullSend || h != _lastCalHash) {
         _calNeedFullSend = false;
-        lastCalHash = h;
+        _lastCalHash = h;
         // Lightweight slot-buffer reset (no LCD redraw) followed by the
         // fresh set. The grid is already on screen, so we don't need the
         // heavy clrScr path here — that was competing with the CALSLOT

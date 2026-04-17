@@ -333,15 +333,13 @@ static void drawCalendarArrows(UTFT* lcd, uint8_t topHour) {
   lcd->print(range, 10, CAL_ARROW_DN_Y + 12);
 }
 
-void displayCalendarScreen(UTFT* lcd, uint8_t topHour, uint32_t weekStart, uint32_t weekEnd) {
-  lcd->clrScr();
-  lcd->setBackColor(COL_BG);
+// Draw just the navy bar + "This Week" + date range. Safe to call on top
+// of an existing calendar screen: only touches the y=0..60 band, so the
+// grid and any already-painted booking rectangles below are untouched.
+void displayCalendarHeader(UTFT* lcd, uint32_t weekStart, uint32_t weekEnd) {
   drawPanel(lcd, 0, 0, SCR_W, 60, COL_NAVY);
   lcd->setColor(COL_WHITE); lcd->setBackColor(COL_NAVY);
 
-  // "This Week" header + "DD Mon - DD Mon" range. Only rendered once CALDONE
-  // has delivered valid week bounds, so the navy bar stays empty until then
-  // and there's no "This Week" -> "This Week 13 Apr - 19 Apr" flicker.
   if (weekStart > 0 && weekEnd > weekStart) {
     static const char* MON_ABR[12] = {"Jan","Feb","Mar","Apr","May","Jun",
                                        "Jul","Aug","Sep","Oct","Nov","Dec"};
@@ -349,8 +347,6 @@ void displayCalendarScreen(UTFT* lcd, uint8_t topHour, uint32_t weekStart, uint3
     time_t we = (time_t)weekEnd;
     ws = (ws > UNIX_OFFSET) ? (ws - UNIX_OFFSET) : 0;
     we = (we > UNIX_OFFSET) ? (we - UNIX_OFFSET) : 0;
-    // Copy first decoded tm before calling localtime a second time —
-    // avr-libc returns a pointer to a single static buffer.
     struct tm startTm;
     struct tm* tms = localtime(&ws);
     if (tms) {
@@ -359,7 +355,6 @@ void displayCalendarScreen(UTFT* lcd, uint8_t topHour, uint32_t weekStart, uint3
       if (tme) {
         lcd->setFont(BigFont);
         lcdPrint(lcd, "This Week", 20, 15);
-
         char range[32];
         snprintf(range, sizeof(range), "%d %s - %d %s",
                  startTm.tm_mday, MON_ABR[startTm.tm_mon],
@@ -372,6 +367,13 @@ void displayCalendarScreen(UTFT* lcd, uint8_t topHour, uint32_t weekStart, uint3
 
   lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
   lcdPrint(lcd, "Swipe right to go back", 500, 38);
+  lcd->setBackColor(COL_BG);
+}
+
+void displayCalendarScreen(UTFT* lcd, uint8_t topHour, uint32_t weekStart, uint32_t weekEnd) {
+  lcd->clrScr();
+  lcd->setBackColor(COL_BG);
+  displayCalendarHeader(lcd, weekStart, weekEnd);
 
   char days[7][4] = {"Mon","Tue","Wed","Thu","Fri","Sat","Sun"};
   int colW = SCR_W / 7;

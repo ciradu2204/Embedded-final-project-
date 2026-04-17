@@ -67,6 +67,12 @@ void displayCalendarScreen(UTFT* lcd, uint8_t topHour, uint32_t weekStart, uint3
 void displayCalendarBookings(UTFT* lcd, CalendarSlot* slots, uint8_t count,
                              uint8_t topHour, uint32_t weekStart, uint32_t weekEnd);
 
+// Redraw only the navy header band (y=0..60) with the "This Week" + date
+// range — used after CALDONE arrives with fresh week bounds, so the full
+// calendar screen doesn't get clrScr'd (which would wipe the grid rows
+// just after CALSLOTs painted them).
+void displayCalendarHeader(UTFT* lcd, uint32_t weekStart, uint32_t weekEnd);
+
 void displayBookNowScreen(UTFT* lcd);
 void displayConfirmation(UTFT* lcd, bool success);
 void displayOfflineWarning(UTFT* lcd, bool show);
