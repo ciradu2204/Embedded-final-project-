@@ -37,7 +37,6 @@ bool pirPresent() {
     if (!_confirmed) {
       _confirmed    = true;
       _justDetected = true;
-      Serial.println(F("[PIR] Presence detected."));
     }
 
   } else {
@@ -52,7 +51,6 @@ bool pirPresent() {
         _confirmed = false;
         _justLost  = true;
         _lowSince  = 0;
-        Serial.println(F("[PIR] Presence lost (debounce expired)."));
       }
       // If debounce has not expired, still report _confirmed = true
     }

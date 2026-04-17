@@ -48,10 +48,7 @@ void megaCommTick() {
 
       if (strcmp(evt, "SCREEN") == 0) {
         int s = extractInt(_rxBuf, "s");
-        if (s >= 0) {
-          _remoteScreen = (uint8_t)s;
-          Serial.printf("[MegaComm] Screen=%u\n", _remoteScreen);
-        }
+        if (s >= 0) _remoteScreen = (uint8_t)s;
       } else if (strcmp(evt, "TOUCH") == 0) {
         _lastEvent.valid = true;
         _lastEvent.bookDuration = 0;
@@ -60,11 +57,8 @@ void megaCommTick() {
         int y = extractInt(_rxBuf, "y");
         _lastEvent.x = (x >= 0) ? (uint16_t)x : 0;
         _lastEvent.y = (y >= 0) ? (uint16_t)y : 0;
-        Serial.printf("[MegaComm] Touch: %s (%u,%u)\n",
-                      _lastEvent.gesture, _lastEvent.x, _lastEvent.y);
       } else if (strcmp(evt, "CALRETRY") == 0) {
         _calRetryPending = true;
-        Serial.println(F("[MegaComm] Calendar retry requested."));
       } else if (strcmp(evt, "BOOK") == 0) {
         int dur = extractInt(_rxBuf, "dur");
         if (dur > 0) {
@@ -73,7 +67,6 @@ void megaCommTick() {
           _lastEvent.bookDuration = (uint16_t)dur;
           _lastEvent.bookPurpose[0] = '\0';
           extractStr(_rxBuf, "purpose", _lastEvent.bookPurpose, sizeof(_lastEvent.bookPurpose));
-          Serial.printf("[MegaComm] Walk-up: %u min purpose=%s\n", dur, _lastEvent.bookPurpose);
         }
       }
     } else {

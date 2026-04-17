@@ -146,8 +146,6 @@ void loop() {
 
   MegaTouchEvent touch = megaGetTouchEvent();
   if (touch.valid && !_confirmPending) {
-    Serial.printf("[Touch] %s\n", touch.gesture);
-
     if (strcmp(touch.gesture, "BOOK") == 0 && touch.bookDuration > 0) {
       // FIX (#2, #6): central availability check + UX feedback when refused.
       const char* purpose = touch.bookPurpose[0] ? touch.bookPurpose : "Walk-up";
@@ -236,8 +234,6 @@ void loop() {
 
 // ════════════════════════════════════════════════════════════════════════════
 static void onBookingMessage(const char* payload) {
-  Serial.printf("[App] Booking: %s\n", payload);
-
   auto extractStr = [](const char* json, const char* key,
                        char* out, uint8_t len) -> bool {
     char search[48];
@@ -294,7 +290,6 @@ static void onBookingMessage(const char* payload) {
     }
     slot.active = true;
     slot.state  = STATE_SCHEDULED;
-    Serial.printf("[App] Slot: id=%s user=%s\n", slot.bookingId, slot.occupantName);
     fsmAddBooking(slot);
     updateLED();
     // FIX: Do NOT call syncDisplay() here. On (re)connect the broker delivers

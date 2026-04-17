@@ -25,10 +25,6 @@ void fsmAddBooking(const BookingSlot& incoming) {
   // keep the LCD stuck on PENDING for the full grace period.
   time_t nowKigali = time(nullptr) + 7200;
   if (nowKigali > 1000000000L && incoming.endTime <= nowKigali) {
-    Serial.printf("[FSM] Ignoring past booking %s (end=%lu now=%lu)\n",
-                  incoming.bookingId,
-                  (unsigned long)incoming.endTime,
-                  (unsigned long)nowKigali);
     // Also make sure any stale copy of this booking is not hanging around.
     for (uint8_t i = 0; i < MAX_SLOTS; i++) {
       if (strcmp(slots[i].bookingId, incoming.bookingId) == 0) {
@@ -47,7 +43,6 @@ void fsmAddBooking(const BookingSlot& incoming) {
     existing->endTime        = incoming.endTime;
     existing->active         = true;
     existing->seenInSnapshot = true;
-    Serial.printf("[FSM] Updated booking %s\n", incoming.bookingId);
     return;
   }
   BookingSlot* slot = findFreeSlot();
@@ -59,7 +54,6 @@ void fsmAddBooking(const BookingSlot& incoming) {
   slot->buzzerFired    = false;
   slot->seenInSnapshot = true;
   slotCount++;
-  Serial.printf("[FSM] Added %s for %s\n", incoming.bookingId, incoming.occupantName);
 }
 
 // Snapshot reconciliation — see fsm.h for the contract. Marks every active
@@ -80,8 +74,6 @@ void fsmPruneUnseen() {
     if (!slots[i].active) continue;
     if (strncmp(slots[i].bookingId, "wu_", 3) == 0) continue;
     if (slots[i].seenInSnapshot) continue;
-    Serial.printf("[FSM] Pruning stale booking %s (deleted upstream)\n",
-                  slots[i].bookingId);
     slots[i].active = false;
     slots[i].state  = STATE_COMPLETED;
   }
@@ -92,7 +84,6 @@ void fsmCancelBooking(const char* bookingId) {
   if (slot) {
     slot->active = false;
     slot->state  = STATE_COMPLETED;
-    Serial.printf("[FSM] Cancelled %s\n", bookingId);
   }
 }
 
@@ -113,16 +104,14 @@ void fsmTick(bool presenceDetected) {
       case STATE_SCHEDULED:
         if (now >= s->startTime) {
           transitionTo(s, STATE_PENDING);
-          s->pendingStartMs = millis();   // FIX: per-slot
-          s->buzzerFired    = false;      // FIX: per-slot
-          Serial.printf("[FSM] %s -> PENDING\n", s->bookingId);
+          s->pendingStartMs = millis();
+          s->buzzerFired    = false;
         }
         break;
 
       case STATE_PENDING:
         if (presenceDetected) {
           transitionTo(s, STATE_ACTIVE);
-          Serial.printf("[FSM] %s -> ACTIVE\n", s->bookingId);
           FsmEvent evt;
           evt.type = EVT_OCCUPANCY_CONFIRMED;
           strlcpy(evt.bookingId, s->bookingId, sizeof(evt.bookingId));
@@ -131,7 +120,6 @@ void fsmTick(bool presenceDetected) {
           eventQueuePush(evt);
         } else if (millis() - s->pendingStartMs >= GRACE_PERIOD_MS) {
           transitionTo(s, STATE_GHOST);
-          Serial.printf("[FSM] %s -> GHOST\n", s->bookingId);
           FsmEvent evt;
           evt.type = EVT_GHOST_RELEASED;
           strlcpy(evt.bookingId, s->bookingId, sizeof(evt.bookingId));
@@ -143,19 +131,16 @@ void fsmTick(bool presenceDetected) {
         break;
 
       case STATE_ACTIVE: {
-        // FIX (#4): absolute-time buzzer trigger. Survives reboot because
-        // it depends on wall clock, not millis() since boot.
+        // Buzzer uses absolute wall-clock so it survives a reboot.
         long remaining = (long)s->endTime - (long)now;
         long warningSecs = (long)(BUZZER_WARNING_MS / 1000UL);
         if (!s->buzzerFired && remaining > 0 && remaining <= warningSecs) {
           s->buzzerFired = true;
           extern void buzzerDoubleBeep();
           buzzerDoubleBeep();
-          Serial.println(F("[FSM] 5-min warning."));
         }
         if (now >= s->endTime) {
           transitionTo(s, STATE_COMPLETED);
-          Serial.printf("[FSM] %s -> COMPLETED\n", s->bookingId);
           FsmEvent evt;
           evt.type = EVT_SESSION_COMPLETED;
           strlcpy(evt.bookingId, s->bookingId, sizeof(evt.bookingId));
@@ -214,10 +199,7 @@ bool fsmCreateWalkUpBooking(const char* occupantName, uint16_t durationMins, con
     // Only consider upcoming / live bookings
     if (slots[i].state == STATE_GHOST || slots[i].state == STATE_COMPLETED) continue;
     if (proposedStart < slots[i].endTime && slots[i].startTime < proposedEnd) {
-      Serial.printf("[FSM] Walk-up rejected: overlaps %s (%lu..%lu)\n",
-                    slots[i].bookingId,
-                    (unsigned long)slots[i].startTime,
-                    (unsigned long)slots[i].endTime);
+      Serial.println(F("[FSM] Walk-up rejected: overlaps existing booking."));
       return false;
     }
   }
@@ -234,7 +216,6 @@ bool fsmCreateWalkUpBooking(const char* occupantName, uint16_t durationMins, con
   slot->active         = true;
   slot->pendingStartMs = 0;
   slot->buzzerFired    = false;
-  Serial.printf("[FSM] Walk-up: %s for %u min (%s)\n", slot->bookingId, durationMins, slot->title);
   FsmEvent evt;
   memset(&evt, 0, sizeof(evt));
   evt.type = EVT_WALK_UP_BOOKING;

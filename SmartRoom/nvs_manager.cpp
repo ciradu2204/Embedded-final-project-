@@ -46,7 +46,6 @@ void nvsSaveBookings(BookingSlot* slots, uint8_t count) {
   buf[pos]   = '\0';
 
   _prefs.putString(NVS_KEY_BOOKINGS, buf);
-  Serial.printf("[NVS] Saved.\n");
 }
 
 // Parse JSON back into slots array. Returns number of slots loaded.
@@ -109,14 +108,10 @@ uint8_t nvsLoadBookings(BookingSlot* slots, uint8_t maxCount) {
     // until the clock is synced: a past slot resurrected pre-NTP will show
     // as RESERVED on the LCD until the next snapshot prunes it.
     time_t nowKigali = time(nullptr) + 7200;
-    if (nowKigali < 1000000000L) {
-      Serial.printf("[NVS] Skipped slot: clock not synced yet.\n");
-    } else if (s.endTime > nowKigali) {
+    if (nowKigali >= 1000000000L && s.endTime > nowKigali) {
       slots[loaded++] = s;
-      Serial.printf("[NVS] Restored: %.36s (%s)\n", s.bookingId, s.occupantName);
-    } else {
-      Serial.printf("[NVS] Skipped expired slot.\n");
     }
+    // Silently skip: clock not synced, or booking already expired.
   }
   Serial.printf("[NVS] Loaded %u slot(s).\n", loaded);
   return loaded;

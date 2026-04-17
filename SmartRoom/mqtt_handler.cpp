@@ -49,7 +49,6 @@ static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
   uint16_t len = min((unsigned int)(sizeof(buf) - 1), length);
   memcpy(buf, payload, len);
   buf[len] = '\0';
-  Serial.printf("[MQTT] Received on %s (%u bytes)\n", topic, (unsigned)len);
 
   if (!_bookingCb) return;
 
@@ -266,8 +265,6 @@ void mqttPublishStatus(const FsmEvent& evt) {
     if (!_mqtt.publish(TOPIC_WALK_UP, payload, false)) {
       Serial.println(F("[MQTT] Walk-up publish failed — re-queuing."));
       eventQueuePush(evt);
-    } else {
-      Serial.printf("[MQTT] Walk-up published: %s\n", payload);
     }
     return;
   }
@@ -288,8 +285,6 @@ void mqttPublishStatus(const FsmEvent& evt) {
   if (!_mqtt.publish(TOPIC_STATUS, payload, false)) {
     Serial.println(F("[MQTT] Publish failed — re-queuing."));
     eventQueuePush(evt);
-  } else {
-    Serial.printf("[MQTT] Published: %s\n", payload);
   }
 }
 
