@@ -139,15 +139,22 @@ void megaSendCalendarData(BookingSlot* slots, uint8_t count) {
              slots[i].title,
              (uint8_t)slots[i].state);
     if (len <= 0) continue;
-    if (len > 48) {
-      MegaSerial.write((const uint8_t*)buf, 48);
-      delay(60);
-      MegaSerial.write((const uint8_t*)(buf + 48), len - 48);
+    // Split long CALSLOTs at 40 bytes with a 70 ms gap, giving the Mega's
+    // 64-byte RX ring a comfortable margin to drain between halves. A few
+    // extra ms buys reliability for the slot that was getting silently
+    // dropped when the stream happened to collide with any LCD work.
+    if (len > 40) {
+      MegaSerial.write((const uint8_t*)buf, 40);
+      delay(70);
+      MegaSerial.write((const uint8_t*)(buf + 40), len - 40);
     } else {
       MegaSerial.write((const uint8_t*)buf, len);
     }
-    delay(120);
+    delay(160);   // was 120 — widen so back-to-back slots don't overlap
   }
+  // Extra settle before CALDONE so the final slot has time to fully
+  // parse before the "draw now" trigger arrives.
+  delay(100);
   char doneBuf[64];
   snprintf(doneBuf, sizeof(doneBuf), "{\"cmd\":\"CALDONE\",\"now\":%lu}\n",
            (unsigned long)(time(nullptr) + 7200));
