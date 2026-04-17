@@ -322,11 +322,40 @@ void displayCalendarScreen(UTFT* lcd, uint8_t topHour, uint32_t weekStart, uint3
   lcd->setBackColor(COL_BG);
   drawPanel(lcd, 0, 0, SCR_W, 60, COL_NAVY);
   lcd->setColor(COL_WHITE); lcd->setBackColor(COL_NAVY);
+
+  // "This Week" header + "DD Mon - DD Mon" range. Only rendered once CALDONE
+  // has delivered valid week bounds, so the navy bar stays empty until then
+  // and there's no "This Week" -> "This Week 13 Apr - 19 Apr" flicker.
+  if (weekStart > 0 && weekEnd > weekStart) {
+    static const char* MON_ABR[12] = {"Jan","Feb","Mar","Apr","May","Jun",
+                                       "Jul","Aug","Sep","Oct","Nov","Dec"};
+    time_t ws = (time_t)weekStart;
+    time_t we = (time_t)weekEnd;
+    ws = (ws > UNIX_OFFSET) ? (ws - UNIX_OFFSET) : 0;
+    we = (we > UNIX_OFFSET) ? (we - UNIX_OFFSET) : 0;
+    // Copy first decoded tm before calling localtime a second time —
+    // avr-libc returns a pointer to a single static buffer.
+    struct tm startTm;
+    struct tm* tms = localtime(&ws);
+    if (tms) {
+      startTm = *tms;
+      struct tm* tme = localtime(&we);
+      if (tme) {
+        lcd->setFont(BigFont);
+        lcdPrint(lcd, "This Week", 20, 15);
+
+        char range[32];
+        snprintf(range, sizeof(range), "%d %s - %d %s",
+                 startTm.tm_mday, MON_ABR[startTm.tm_mon],
+                 tme->tm_mday,    MON_ABR[tme->tm_mon]);
+        lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
+        lcdPrint(lcd, range, 220, 22);
+      }
+    }
+  }
+
   lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
   lcdPrint(lcd, "Swipe right to go back", 500, 38);
-
-  (void)weekStart;
-  (void)weekEnd;
 
   char days[7][4] = {"Mon","Tue","Wed","Thu","Fri","Sat","Sun"};
   int colW = SCR_W / 7;

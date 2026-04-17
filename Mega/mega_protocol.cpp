@@ -198,6 +198,9 @@ void handleIncomingCommand(UTFT* lcd) {
           calWeekEnd   = calWeekStart + 7 * 86400UL - 1;
           Serial.print(F("[Cal] weekStart=")); Serial.print(calWeekStart);
           Serial.print(F(" weekEnd="));        Serial.println(calWeekEnd);
+          // Redraw header so the date range appears alongside "This Week"
+          // now that we have valid bounds.
+          displayCalendarScreen(lcd, calTopHour, calWeekStart, calWeekEnd);
         }
       }
 
