@@ -32,6 +32,15 @@ static const uint32_t WIFI_RETRY_MS   = 500;   // poll interval during connect
 static uint8_t       _wifiTries       = 0;
 static const uint8_t WIFI_MAX_TRIES   = 40;    // 40 * 500ms = 20s max
 
+// NTP retry state. If the initial setup-time sync fails (firewall, DNS,
+// upstream NTP outage), configTime() silently leaves time(nullptr) near zero
+// and every wall-clock check in the firmware quietly fails — the FSM never
+// advances slots past SCHEDULED, walk-ups refuse to create, and CALDONE's
+// `now` value is tiny so the Mega's week-filter never kicks in. Re-request
+// sync every NTP_RETRY_MS until we see a plausible epoch.
+static unsigned long _lastNtpCheckMs  = 0;
+static const uint32_t NTP_RETRY_MS    = 30000;
+
 static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
   // Must match the PubSubClient buffer size — snapshots can carry 20+
   // bookings and each is ~250 bytes after JSON serialization.
@@ -190,6 +199,20 @@ void mqttLoop() {
   if (WiFi.status() != WL_CONNECTED) {
     stepWiFiConnect();
     return;   // Cannot do MQTT without WiFi
+  }
+
+  // Periodic NTP re-sync: if the initial blocking sync at boot timed out or
+  // the link had no internet yet, time(nullptr) stays near zero and the FSM
+  // can never transition. Keep retrying until the clock comes up.
+  {
+    unsigned long ms = millis();
+    if (ms - _lastNtpCheckMs >= NTP_RETRY_MS) {
+      _lastNtpCheckMs = ms;
+      if (time(nullptr) < 1000000000L) {
+        Serial.println(F("[NTP] Clock still not synced — re-requesting."));
+        configTime(0, 0, "pool.ntp.org", "time.google.com");
+      }
+    }
   }
 
   if (!_mqtt.connected()) {
