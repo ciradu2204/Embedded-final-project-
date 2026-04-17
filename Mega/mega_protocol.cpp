@@ -126,6 +126,12 @@ void handleIncomingCommand(UTFT* lcd) {
     currentData.state         = (uint8_t)extractInt(buf, "state");
     currentData.countdownMins = (uint16_t)extractInt(buf, "mins");
     currentData.countdownSecs = (uint32_t)extractLong(buf, "secs");
+    currentData.upcomingOccupant[0] = '\0';
+    currentData.upcomingTitle[0]    = '\0';
+    currentData.upcomingStart[0]    = '\0';
+    extractStr(buf, "uOcc",   currentData.upcomingOccupant, sizeof(currentData.upcomingOccupant));
+    extractStr(buf, "uTitle", currentData.upcomingTitle,    sizeof(currentData.upcomingTitle));
+    extractStr(buf, "uStart", currentData.upcomingStart,    sizeof(currentData.upcomingStart));
     displayStatusScreen(lcd, &currentData);
 
   } else if (strcmp(cmd, "CALENDAR") == 0) {

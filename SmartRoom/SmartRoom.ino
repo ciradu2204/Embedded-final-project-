@@ -327,7 +327,17 @@ static void syncDisplay() {
     secs = fsmCountdownSecs();
     mins = (uint16_t)(secs / 60);
   }
-  megaSendStatus(ROOM_NAME, (uint8_t)state, occupant, title, startStr, endStr, mins, secs);
+  // "Up next" panel on the status screen — populated from the earliest
+  // future SCHEDULED slot regardless of whether the room is available.
+  char upOcc[32] = "", upTitle[32] = "", upStart[12] = "";
+  BookingSlot* up = fsmGetUpcomingSlot();
+  if (up) {
+    strlcpy(upOcc,   up->occupantName, sizeof(upOcc));
+    strlcpy(upTitle, up->title,        sizeof(upTitle));
+    formatTime(up->startTime, upStart, sizeof(upStart));
+  }
+  megaSendStatus(ROOM_NAME, (uint8_t)state, occupant, title, startStr, endStr,
+                 mins, secs, upOcc, upTitle, upStart);
 }
 
 static void formatTime(time_t t, char* buf, uint8_t bufLen) {

@@ -19,7 +19,10 @@ void megaCommTick();
 void megaSendStatus(const char* roomName, uint8_t state,
                     const char* occupantName, const char* title,
                     const char* startTime, const char* endTime,
-                    uint16_t countdownMins, uint32_t countdownSecs);
+                    uint16_t countdownMins, uint32_t countdownSecs,
+                    const char* upcomingOccupant,
+                    const char* upcomingTitle,
+                    const char* upcomingStart);
 
 void megaSendCalendarData(BookingSlot* slots, uint8_t count);
 void megaSendCalendar();

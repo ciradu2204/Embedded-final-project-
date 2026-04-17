@@ -45,6 +45,11 @@ struct RoomDisplayData {
   uint8_t  state;
   uint16_t countdownMins;
   uint32_t countdownSecs;
+  // Next reservation after the current moment, shown on the right side of
+  // the status screen when the room is available. Empty strings when none.
+  char     upcomingOccupant[32];
+  char     upcomingTitle[32];
+  char     upcomingStart[12];
 };
 
 void displayStartup(UTFT* lcd);

@@ -88,15 +88,22 @@ uint8_t megaGetRemoteScreen()            { return _remoteScreen; }
 void megaSendStatus(const char* roomName, uint8_t state,
                     const char* occupantName, const char* title,
                     const char* startTime, const char* endTime,
-                    uint16_t countdownMins, uint32_t countdownSecs) {
-  char buf[320];
+                    uint16_t countdownMins, uint32_t countdownSecs,
+                    const char* upcomingOccupant,
+                    const char* upcomingTitle,
+                    const char* upcomingStart) {
+  char buf[480];
   snprintf(buf, sizeof(buf),
            "{\"cmd\":\"STATUS\",\"room\":\"%s\",\"state\":%u,"
            "\"occ\":\"%s\",\"title\":\"%s\","
            "\"start\":\"%s\",\"end\":\"%s\","
-           "\"mins\":%u,\"secs\":%lu}\n",
+           "\"mins\":%u,\"secs\":%lu,"
+           "\"uOcc\":\"%s\",\"uTitle\":\"%s\",\"uStart\":\"%s\"}\n",
            roomName, state, occupantName, title ? title : "",
-           startTime, endTime, countdownMins, (unsigned long)countdownSecs);
+           startTime, endTime, countdownMins, (unsigned long)countdownSecs,
+           upcomingOccupant ? upcomingOccupant : "",
+           upcomingTitle    ? upcomingTitle    : "",
+           upcomingStart    ? upcomingStart    : "");
   MegaSerial.print(buf);
 }
 

@@ -300,6 +300,19 @@ uint16_t fsmCountdownMins() {
 
 BookingSlot* fsmGetSlots() { return slots; }
 
+BookingSlot* fsmGetUpcomingSlot() {
+  time_t nowKigali = time(nullptr) + 7200;
+  if (nowKigali < 1000000000L) return nullptr;
+  BookingSlot* best = nullptr;
+  for (uint8_t i = 0; i < MAX_SLOTS; i++) {
+    if (!slots[i].active) continue;
+    if (slots[i].state != STATE_SCHEDULED) continue;
+    if (slots[i].startTime <= nowKigali) continue;
+    if (!best || slots[i].startTime < best->startTime) best = &slots[i];
+  }
+  return best;
+}
+
 static void transitionTo(BookingSlot* slot, FSMState newState) {
   slot->state = newState;
 }

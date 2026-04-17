@@ -94,11 +94,14 @@ static bool            _prevOffline = false;
 void displayStatusScreen(UTFT* lcd, RoomDisplayData* d) {
   bool stateChanged = _firstDraw ||
                       (d->state != _prevData.state) ||
-                      (strcmp(d->roomName,     _prevData.roomName)     != 0) ||
-                      (strcmp(d->occupantName, _prevData.occupantName) != 0) ||
-                      (strcmp(d->title,        _prevData.title)        != 0) ||
-                      (strcmp(d->startTime,    _prevData.startTime)    != 0) ||
-                      (strcmp(d->endTime,      _prevData.endTime)      != 0);
+                      (strcmp(d->roomName,         _prevData.roomName)         != 0) ||
+                      (strcmp(d->occupantName,     _prevData.occupantName)     != 0) ||
+                      (strcmp(d->title,            _prevData.title)            != 0) ||
+                      (strcmp(d->startTime,        _prevData.startTime)        != 0) ||
+                      (strcmp(d->endTime,          _prevData.endTime)          != 0) ||
+                      (strcmp(d->upcomingOccupant, _prevData.upcomingOccupant) != 0) ||
+                      (strcmp(d->upcomingTitle,    _prevData.upcomingTitle)    != 0) ||
+                      (strcmp(d->upcomingStart,    _prevData.upcomingStart)    != 0);
 
   if (stateChanged) {
     _firstDraw   = false;
@@ -153,6 +156,32 @@ void displayStatusScreen(UTFT* lcd, RoomDisplayData* d) {
       lcdPrint(lcd, "BOOK NOW", 40, 255);
       lcd->setBackColor(COL_BG); lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
       lcdPrint(lcd, "Tap to reserve this room", 20, 320);
+    }
+
+    // "Up next" panel — right column, replaces the old LED legend.
+    // Draw a soft navy card so the block feels like a unit, and only
+    // when there's an actual upcoming reservation.
+    if (d->upcomingStart[0]) {
+      drawPanel(lcd, 430, 90, 350, 210, COL_NAVY);
+      lcd->setBackColor(COL_NAVY); lcd->setColor(COL_GRAY);
+      lcd->setFont(SmallFont);
+      lcdPrint(lcd, "UP NEXT", 450, 100);
+
+      lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
+      lcdPrint(lcd, d->upcomingStart, 450, 125);
+
+      lcd->setColor(COL_GRAY); lcd->setFont(SmallFont);
+      lcdPrint(lcd, "Booked by:", 450, 170);
+      lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
+      lcdPrint(lcd, d->upcomingOccupant, 450, 188);
+
+      if (d->upcomingTitle[0]) {
+        lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
+        lcdPrint(lcd, "Purpose:", 450, 225);
+        lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
+        lcdPrint(lcd, d->upcomingTitle, 450, 243);
+      }
+      lcd->setBackColor(COL_BG);
     }
 
     memcpy(&_prevData, d, sizeof(RoomDisplayData));
