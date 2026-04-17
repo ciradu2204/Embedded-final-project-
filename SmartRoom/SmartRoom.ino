@@ -66,7 +66,11 @@ void setup() {
 
   fsmInit();
   {
-    BookingSlot saved[MAX_SLOTS];
+    // Static (BSS) instead of stack — sizeof(BookingSlot)*MAX_SLOTS is
+    // ~3.6KB and nvsLoadBookings itself already pushes a ~4KB String onto
+    // the stack, which together overflow the 8KB loopTask stack and trip
+    // the stack canary watchpoint at boot.
+    static BookingSlot saved[MAX_SLOTS];
     uint8_t count = nvsLoadBookings(saved, MAX_SLOTS);
     for (uint8_t i = 0; i < count; i++) fsmAddBooking(saved[i]);
   }

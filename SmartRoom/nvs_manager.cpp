@@ -13,7 +13,10 @@ void nvsInit() {
 // Example: [{"id":"aaba834a-...","occ":"Alice","s":1714000000,"e":1714003600,"st":2}]
 void nvsSaveBookings(BookingSlot* slots, uint8_t count) {
   // Must fit up to MAX_SLOTS * ~150 bytes per booking + brackets.
-  char buf[4096];
+  // Static (BSS) to keep it off the loopTask stack — combined with other
+  // large stack frames (nvsLoadBookings' internal String, various display
+  // JSON buffers), a 4KB stack allocation here was tripping the canary.
+  static char buf[4096];
   uint16_t pos = 0;
 
   buf[pos++] = '[';
