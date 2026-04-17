@@ -111,10 +111,6 @@ void handleIncomingCommand(UTFT* lcd) {
   char cmd[16] = {0};
   if (!extractStr(buf, "cmd", cmd, sizeof(cmd))) return;
 
-  // Echo every command we see. Helps diagnose whether CALSLOT/CALDONE
-  // actually reach the Mega vs. being dropped at the UART layer.
-  Serial.print(F("[Cmd] ")); Serial.println(cmd);
-
   if (strcmp(cmd, "STATUS") == 0) {
     if (currentScreen != 0) return;   // Ignore on sub-screens
     extractStr(buf, "room",  currentData.roomName,     sizeof(currentData.roomName));
@@ -168,20 +164,11 @@ void handleIncomingCommand(UTFT* lcd) {
       cs.state  = (uint8_t)extractInt(buf, "st");
       cs.active = (cs.startSecs > 0);
       if (cs.active) calSlotCount++;
-      Serial.print(F("[Cal] slot s=")); Serial.print(cs.startSecs);
-      Serial.print(F(" e="));           Serial.print(cs.endSecs);
-      Serial.print(F(" st="));          Serial.print(cs.state);
-      Serial.print(F(" n='"));          Serial.print(cs.name);
-      Serial.print(F("' count="));      Serial.println(calSlotCount);
     } else {
       Serial.println(F("[Cal] CALSLOT dropped: buffer full"));
     }
 
   } else if (strcmp(cmd, "CALDONE") == 0) {
-    Serial.print(F("[Cal] CALDONE received, count="));
-    Serial.print(calSlotCount);
-    Serial.print(F(" screen="));
-    Serial.println(currentScreen);
     if (currentScreen == 1) {
       // If the ESP32 told us how many slots it sent and we received fewer,
       // a CALSLOT was dropped on the UART. Ask for a fresh send instead of
@@ -212,8 +199,6 @@ void handleIncomingCommand(UTFT* lcd) {
           // Convert back to Unix (Kigali) timestamps for the filter
           calWeekStart = (uint32_t)(monAdj + UNIX_OFFSET);
           calWeekEnd   = calWeekStart + 7 * 86400UL - 1;
-          Serial.print(F("[Cal] weekStart=")); Serial.print(calWeekStart);
-          Serial.print(F(" weekEnd="));        Serial.println(calWeekEnd);
           // Refresh ONLY the navy header band so the date range appears
           // alongside "This Week" without wiping the grid we're about to
           // paint bookings into. Full clrScr-redraw here was causing the
@@ -256,15 +241,9 @@ void handleIncomingCommand(UTFT* lcd) {
           if (want < CAL_DAY_START_HOUR) want = CAL_DAY_START_HOUR;
           if (want > maxTop)             want = maxTop;
           calTopHour = (uint8_t)want;
-          Serial.print(F("[Cal] auto-scroll target hour="));
-          Serial.print(tmT->tm_hour);
-          Serial.print(F(" topHour="));
-          Serial.println(calTopHour);
         }
       }
-      Serial.print(F("[Cal] drawing topHour=")); Serial.println(calTopHour);
       displayCalendarBookings(lcd, calSlots, calSlotCount, calTopHour, calWeekStart, calWeekEnd);
-      Serial.println(F("[Cal] draw done"));
     }
 
   } else if (strcmp(cmd, "MSG") == 0) {
