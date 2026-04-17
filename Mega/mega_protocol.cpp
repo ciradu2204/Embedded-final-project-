@@ -129,9 +129,13 @@ void handleIncomingCommand(UTFT* lcd) {
     currentData.upcomingOccupant[0] = '\0';
     currentData.upcomingTitle[0]    = '\0';
     currentData.upcomingStart[0]    = '\0';
+    currentData.upcomingEnd[0]      = '\0';
+    currentData.upcomingDate[0]     = '\0';
     extractStr(buf, "uOcc",   currentData.upcomingOccupant, sizeof(currentData.upcomingOccupant));
     extractStr(buf, "uTitle", currentData.upcomingTitle,    sizeof(currentData.upcomingTitle));
     extractStr(buf, "uStart", currentData.upcomingStart,    sizeof(currentData.upcomingStart));
+    extractStr(buf, "uEnd",   currentData.upcomingEnd,      sizeof(currentData.upcomingEnd));
+    extractStr(buf, "uDate",  currentData.upcomingDate,     sizeof(currentData.upcomingDate));
     displayStatusScreen(lcd, &currentData);
 
   } else if (strcmp(cmd, "CALENDAR") == 0) {

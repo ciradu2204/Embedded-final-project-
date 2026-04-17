@@ -101,7 +101,9 @@ void displayStatusScreen(UTFT* lcd, RoomDisplayData* d) {
                       (strcmp(d->endTime,          _prevData.endTime)          != 0) ||
                       (strcmp(d->upcomingOccupant, _prevData.upcomingOccupant) != 0) ||
                       (strcmp(d->upcomingTitle,    _prevData.upcomingTitle)    != 0) ||
-                      (strcmp(d->upcomingStart,    _prevData.upcomingStart)    != 0);
+                      (strcmp(d->upcomingStart,    _prevData.upcomingStart)    != 0) ||
+                      (strcmp(d->upcomingEnd,      _prevData.upcomingEnd)      != 0) ||
+                      (strcmp(d->upcomingDate,     _prevData.upcomingDate)     != 0);
 
   if (stateChanged) {
     _firstDraw   = false;
@@ -162,24 +164,38 @@ void displayStatusScreen(UTFT* lcd, RoomDisplayData* d) {
     // Draw a soft navy card so the block feels like a unit, and only
     // when there's an actual upcoming reservation.
     if (d->upcomingStart[0]) {
-      drawPanel(lcd, 430, 90, 350, 210, COL_NAVY);
+      drawPanel(lcd, 430, 90, 350, 260, COL_NAVY);
       lcd->setBackColor(COL_NAVY); lcd->setColor(COL_GRAY);
       lcd->setFont(SmallFont);
       lcdPrint(lcd, "UP NEXT", 450, 100);
 
+      // Date line — day + date (e.g. "Mon 21 Apr")
+      if (d->upcomingDate[0]) {
+        lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
+        lcdPrint(lcd, d->upcomingDate, 450, 122);
+      }
+
+      // Time range (e.g. "10:00 - 11:00")
+      char rangeBuf[24];
+      if (d->upcomingEnd[0]) {
+        snprintf(rangeBuf, sizeof(rangeBuf), "%s - %s",
+                 d->upcomingStart, d->upcomingEnd);
+      } else {
+        strlcpy(rangeBuf, d->upcomingStart, sizeof(rangeBuf));
+      }
       lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
-      lcdPrint(lcd, d->upcomingStart, 450, 125);
+      lcdPrint(lcd, rangeBuf, 450, 152);
 
       lcd->setColor(COL_GRAY); lcd->setFont(SmallFont);
-      lcdPrint(lcd, "Booked by:", 450, 170);
+      lcdPrint(lcd, "Booked by:", 450, 192);
       lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
-      lcdPrint(lcd, d->upcomingOccupant, 450, 188);
+      lcdPrint(lcd, d->upcomingOccupant, 450, 210);
 
       if (d->upcomingTitle[0]) {
         lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
-        lcdPrint(lcd, "Purpose:", 450, 225);
+        lcdPrint(lcd, "Purpose:", 450, 250);
         lcd->setColor(COL_WHITE); lcd->setFont(BigFont);
-        lcdPrint(lcd, d->upcomingTitle, 450, 243);
+        lcdPrint(lcd, d->upcomingTitle, 450, 268);
       }
       lcd->setBackColor(COL_BG);
     }

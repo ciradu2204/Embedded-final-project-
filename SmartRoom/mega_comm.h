@@ -22,7 +22,9 @@ void megaSendStatus(const char* roomName, uint8_t state,
                     uint16_t countdownMins, uint32_t countdownSecs,
                     const char* upcomingOccupant,
                     const char* upcomingTitle,
-                    const char* upcomingStart);
+                    const char* upcomingStart,
+                    const char* upcomingEnd,
+                    const char* upcomingDate);
 
 void megaSendCalendarData(BookingSlot* slots, uint8_t count);
 void megaSendCalendar();

@@ -329,15 +329,26 @@ static void syncDisplay() {
   }
   // "Up next" panel on the status screen — populated from the earliest
   // future SCHEDULED slot regardless of whether the room is available.
-  char upOcc[32] = "", upTitle[32] = "", upStart[12] = "";
+  char upOcc[32] = "", upTitle[32] = "", upStart[12] = "",
+       upEnd[12] = "", upDate[24] = "";
   BookingSlot* up = fsmGetUpcomingSlot();
   if (up) {
     strlcpy(upOcc,   up->occupantName, sizeof(upOcc));
     strlcpy(upTitle, up->title,        sizeof(upTitle));
     formatTime(up->startTime, upStart, sizeof(upStart));
+    formatTime(up->endTime,   upEnd,   sizeof(upEnd));
+    // "Mon 21 Apr" — date label for the upcoming booking.
+    struct tm* tmU = localtime(&up->startTime);
+    if (tmU) {
+      static const char* DOW[7]    = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
+      static const char* MON_ABR[] = {"Jan","Feb","Mar","Apr","May","Jun",
+                                       "Jul","Aug","Sep","Oct","Nov","Dec"};
+      snprintf(upDate, sizeof(upDate), "%s %d %s",
+               DOW[tmU->tm_wday], tmU->tm_mday, MON_ABR[tmU->tm_mon]);
+    }
   }
   megaSendStatus(ROOM_NAME, (uint8_t)state, occupant, title, startStr, endStr,
-                 mins, secs, upOcc, upTitle, upStart);
+                 mins, secs, upOcc, upTitle, upStart, upEnd, upDate);
 }
 
 static void formatTime(time_t t, char* buf, uint8_t bufLen) {

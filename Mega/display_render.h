@@ -49,7 +49,9 @@ struct RoomDisplayData {
   // the status screen when the room is available. Empty strings when none.
   char     upcomingOccupant[32];
   char     upcomingTitle[32];
-  char     upcomingStart[12];
+  char     upcomingStart[12];    // HH:MM
+  char     upcomingEnd[12];      // HH:MM
+  char     upcomingDate[24];     // e.g. "Mon 21 Apr"
 };
 
 void displayStartup(UTFT* lcd);

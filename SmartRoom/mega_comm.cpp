@@ -91,19 +91,24 @@ void megaSendStatus(const char* roomName, uint8_t state,
                     uint16_t countdownMins, uint32_t countdownSecs,
                     const char* upcomingOccupant,
                     const char* upcomingTitle,
-                    const char* upcomingStart) {
-  char buf[480];
+                    const char* upcomingStart,
+                    const char* upcomingEnd,
+                    const char* upcomingDate) {
+  char buf[560];
   snprintf(buf, sizeof(buf),
            "{\"cmd\":\"STATUS\",\"room\":\"%s\",\"state\":%u,"
            "\"occ\":\"%s\",\"title\":\"%s\","
            "\"start\":\"%s\",\"end\":\"%s\","
            "\"mins\":%u,\"secs\":%lu,"
-           "\"uOcc\":\"%s\",\"uTitle\":\"%s\",\"uStart\":\"%s\"}\n",
+           "\"uOcc\":\"%s\",\"uTitle\":\"%s\","
+           "\"uStart\":\"%s\",\"uEnd\":\"%s\",\"uDate\":\"%s\"}\n",
            roomName, state, occupantName, title ? title : "",
            startTime, endTime, countdownMins, (unsigned long)countdownSecs,
            upcomingOccupant ? upcomingOccupant : "",
            upcomingTitle    ? upcomingTitle    : "",
-           upcomingStart    ? upcomingStart    : "");
+           upcomingStart    ? upcomingStart    : "",
+           upcomingEnd      ? upcomingEnd      : "",
+           upcomingDate     ? upcomingDate     : "");
   MegaSerial.print(buf);
 }
 
