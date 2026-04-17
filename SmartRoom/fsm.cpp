@@ -249,14 +249,26 @@ bool fsmCreateWalkUpBooking(const char* occupantName, uint16_t durationMins, con
   return true;
 }
 
-// FIX: Priority ordering: ACTIVE > PENDING > SCHEDULED > others
-// Previously returned first active slot found, which could be a future SCHEDULED
-// slot when an ACTIVE one also existed.
+// Priority ordering for the status screen: ACTIVE > PENDING > SCHEDULED-soon > others.
+// A SCHEDULED slot is only considered current-state-driving if it starts within
+// RESERVED_SOON_SECS — beyond that, the room is effectively free right now
+// (the reservation shows up on the calendar but the status screen stays
+// AVAILABLE so walk-ups don't need to wait for a meeting that's hours away).
+static const time_t RESERVED_SOON_SECS = 15 * 60;  // 15 minutes
+
 FSMState fsmGetCurrentState() {
+  time_t nowKigali = time(nullptr) + 7200;
+  bool clockReady  = (nowKigali > 1000000000L);
+
   FSMState best = STATE_COMPLETED;  // lowest priority (= available)
   for (uint8_t i = 0; i < MAX_SLOTS; i++) {
     if (!slots[i].active) continue;
     FSMState s = slots[i].state;
+    if (s == STATE_SCHEDULED && clockReady) {
+      // Ignore far-future reservations — don't let them mask the AVAILABLE
+      // label on the status screen. The calendar view still shows them.
+      if (slots[i].startTime > nowKigali + RESERVED_SOON_SECS) continue;
+    }
     auto urgency = [](FSMState st) -> int {
       switch (st) {
         case STATE_ACTIVE:    return 4;
