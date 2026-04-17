@@ -112,10 +112,13 @@ void megaSendCalendarData(BookingSlot* slots, uint8_t count) {
     if (!slots[i].active) continue;
     if (slots[i].state == STATE_COMPLETED || slots[i].state == STATE_GHOST) continue;
     char buf[200];
-    int len = snprintf(buf, sizeof(buf),
+    // Send Kigali-local wall-clock timestamps (raw UTC + 7200) so the Mega
+     // renders the grid using the same convention as the CALDONE `now` value
+     // and the week-filter bounds derived from it.
+     int len = snprintf(buf, sizeof(buf),
              "{\"cmd\":\"CALSLOT\",\"s\":%lu,\"e\":%lu,\"n\":\"%s\",\"t\":\"%s\",\"st\":%u}\n",
-             (unsigned long)slots[i].startTime,
-             (unsigned long)slots[i].endTime,
+             (unsigned long)(slots[i].startTime + 7200),
+             (unsigned long)(slots[i].endTime   + 7200),
              slots[i].occupantName,
              slots[i].title,
              (uint8_t)slots[i].state);
