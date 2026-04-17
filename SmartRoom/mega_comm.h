@@ -41,6 +41,10 @@ void megaSendMessage(const char* text);
 void    megaSetRemoteScreen(uint8_t screen);
 uint8_t megaGetRemoteScreen();
 
+// One-shot flag consumed by the main loop to trigger a full CALSLOT resend
+// after the Mega reported a count mismatch on the preceding CALDONE.
+bool    megaTakeCalendarRetry();
+
 MegaTouchEvent megaGetTouchEvent();
 
 #endif

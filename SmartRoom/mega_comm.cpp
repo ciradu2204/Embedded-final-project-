@@ -8,6 +8,9 @@ static MegaTouchEvent _lastEvent     = {false, "", 0, 0, 0, ""};
 static char           _rxBuf[256];
 static uint8_t        _rxPos         = 0;
 static uint8_t        _remoteScreen  = 0;
+// Set by megaCommTick when the Mega requests a calendar resend (CALRETRY).
+// Cleared by megaTakeCalendarRetry() once the main loop has acted on it.
+static bool           _calRetryPending = false;
 
 static bool extractStr(const char* json, const char* key, char* out, uint8_t outLen) {
   char search[32];
@@ -59,6 +62,9 @@ void megaCommTick() {
         _lastEvent.y = (y >= 0) ? (uint16_t)y : 0;
         Serial.printf("[MegaComm] Touch: %s (%u,%u)\n",
                       _lastEvent.gesture, _lastEvent.x, _lastEvent.y);
+      } else if (strcmp(evt, "CALRETRY") == 0) {
+        _calRetryPending = true;
+        Serial.println(F("[MegaComm] Calendar retry requested."));
       } else if (strcmp(evt, "BOOK") == 0) {
         int dur = extractInt(_rxBuf, "dur");
         if (dur > 0) {
@@ -84,6 +90,12 @@ MegaTouchEvent megaGetTouchEvent() {
 
 void megaSetRemoteScreen(uint8_t screen) { _remoteScreen = screen; }
 uint8_t megaGetRemoteScreen()            { return _remoteScreen; }
+
+bool megaTakeCalendarRetry() {
+  bool p = _calRetryPending;
+  _calRetryPending = false;
+  return p;
+}
 
 void megaSendStatus(const char* roomName, uint8_t state,
                     const char* occupantName, const char* title,
@@ -120,9 +132,11 @@ void megaSendCalendarData(BookingSlot* slots, uint8_t count) {
   // between. No flush() — ESP32 HardwareSerial.flush() can block for a
   // long time under contention, and the delays here are already long
   // enough that any reasonable hardware will finish the transmit.
+  uint8_t sent = 0;
   for (uint8_t i = 0; i < MAX_SLOTS; i++) {
     if (!slots[i].active) continue;
     if (slots[i].state == STATE_COMPLETED || slots[i].state == STATE_GHOST) continue;
+    sent++;
     char buf[200];
     // slots[i].startTime / endTime are already Kigali wall-clock epoch
     // (the backend shifted by KIGALI_OFFSET_SECONDS before publishing).
@@ -155,9 +169,13 @@ void megaSendCalendarData(BookingSlot* slots, uint8_t count) {
   // Extra settle before CALDONE so the final slot has time to fully
   // parse before the "draw now" trigger arrives.
   delay(100);
-  char doneBuf[64];
-  snprintf(doneBuf, sizeof(doneBuf), "{\"cmd\":\"CALDONE\",\"now\":%lu}\n",
-           (unsigned long)(time(nullptr) + 7200));
+  // Include the expected slot count so the Mega can detect drops on the
+  // UART and request a resend via a CALRETRY event. See the CALDONE handler
+  // in mega_protocol.cpp and the CALRETRY path in onMegaTouchEvent.
+  char doneBuf[80];
+  snprintf(doneBuf, sizeof(doneBuf),
+           "{\"cmd\":\"CALDONE\",\"now\":%lu,\"n\":%u}\n",
+           (unsigned long)(time(nullptr) + 7200), (unsigned)sent);
   MegaSerial.print(doneBuf);
 }
 

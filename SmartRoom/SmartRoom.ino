@@ -106,6 +106,18 @@ void loop() {
   buzzerTick();
   megaCommTick();
 
+  // Calendar resend path — fires when the Mega's CALDONE handler spotted
+  // a count mismatch (a CALSLOT was dropped on the UART). Resend the full
+  // slot table and clear the cached hash so the 1Hz refresh doesn't skip
+  // the next due tick thinking the data is unchanged.
+  if (megaTakeCalendarRetry() && megaGetRemoteScreen() == 1) {
+    Serial.println(F("[App] Calendar retry — resending slot table."));
+    megaSendCalReset();
+    delay(30);
+    megaSendCalendarData(fsmGetSlots(), MAX_SLOTS);
+    _lastCalHash = computeCalHash();
+  }
+
   // FIX (#3): Non-blocking startup handshake — fires once, ~1.5s after boot.
   if (!_startupDone && now - _startupTimeMs >= STARTUP_DELAY_MS) {
     megaSendStartup();

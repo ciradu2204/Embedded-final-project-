@@ -183,6 +183,18 @@ void handleIncomingCommand(UTFT* lcd) {
     Serial.print(F(" screen="));
     Serial.println(currentScreen);
     if (currentScreen == 1) {
+      // If the ESP32 told us how many slots it sent and we received fewer,
+      // a CALSLOT was dropped on the UART. Ask for a fresh send instead of
+      // rendering an incomplete grid.
+      long expected = extractLong(buf, "n");
+      if (expected > 0 && (uint8_t)expected != calSlotCount) {
+        Serial.print(F("[Cal] CALDONE mismatch: expected="));
+        Serial.print(expected);
+        Serial.print(F(" got="));
+        Serial.println(calSlotCount);
+        Serial2.print("{\"evt\":\"CALRETRY\"}\n");
+        return;
+      }
       // Compute this week's Monday 00:00 and Sunday 23:59:59 from the ESP32 now.
       long nowSecs = extractLong(buf, "now");
       if (nowSecs > 1000000000L) {
