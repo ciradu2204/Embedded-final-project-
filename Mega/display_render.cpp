@@ -309,13 +309,23 @@ void displayCalendarScreen(UTFT* lcd, uint8_t topHour, uint32_t weekStart, uint3
     time_t we = (time_t)weekEnd;
     ws = (ws > UNIX_OFFSET) ? (ws - UNIX_OFFSET) : 0;
     we = (we > UNIX_OFFSET) ? (we - UNIX_OFFSET) : 0;
+    // localtime() returns a pointer to a SINGLE static buffer — a second
+    // call overwrites the first result. Copy the first decoded tm out
+    // before asking for the second, otherwise both ends read as the end
+    // date and the header renders as "19 Apr - 19 Apr".
+    struct tm startTm;
     struct tm* tms = localtime(&ws);
-    struct tm* tme = localtime(&we);
     char hdr[40];
-    if (tms && tme) {
-      snprintf(hdr, sizeof(hdr), "%d %s - %d %s",
-               tms->tm_mday, MON_ABR[tms->tm_mon],
-               tme->tm_mday, MON_ABR[tme->tm_mon]);
+    if (tms) {
+      startTm = *tms;
+      struct tm* tme = localtime(&we);
+      if (tme) {
+        snprintf(hdr, sizeof(hdr), "%d %s - %d %s",
+                 startTm.tm_mday, MON_ABR[startTm.tm_mon],
+                 tme->tm_mday,    MON_ABR[tme->tm_mon]);
+      } else {
+        strcpy(hdr, "This Week");
+      }
     } else {
       strcpy(hdr, "This Week");
     }
