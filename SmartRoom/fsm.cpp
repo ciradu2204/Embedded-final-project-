@@ -43,9 +43,10 @@ void fsmAddBooking(const BookingSlot& incoming) {
   if (existing) {
     strlcpy(existing->occupantName, incoming.occupantName, sizeof(existing->occupantName));
     strlcpy(existing->title,        incoming.title,        sizeof(existing->title));
-    existing->startTime = incoming.startTime;
-    existing->endTime   = incoming.endTime;
-    existing->active    = true;
+    existing->startTime      = incoming.startTime;
+    existing->endTime        = incoming.endTime;
+    existing->active         = true;
+    existing->seenInSnapshot = true;
     Serial.printf("[FSM] Updated booking %s\n", incoming.bookingId);
     return;
   }
@@ -56,8 +57,34 @@ void fsmAddBooking(const BookingSlot& incoming) {
   slot->active         = true;
   slot->pendingStartMs = 0;
   slot->buzzerFired    = false;
+  slot->seenInSnapshot = true;
   slotCount++;
   Serial.printf("[FSM] Added %s for %s\n", incoming.bookingId, incoming.occupantName);
+}
+
+// Snapshot reconciliation — see fsm.h for the contract. Marks every active
+// non-walk-up slot as "unseen" so that the subsequent fsmAddBooking calls
+// (driven by the snapshot payload) can flag the ones still present.
+void fsmBeginSnapshot() {
+  for (uint8_t i = 0; i < MAX_SLOTS; i++) {
+    slots[i].seenInSnapshot = false;
+  }
+}
+
+// Drop any slot the backend no longer reports. Walk-ups (id prefix "wu_")
+// are skipped because the backend may not have echoed them back yet; their
+// eventual replacement via the server-assigned UUID is handled by the
+// normal fsmAddBooking path when the next snapshot arrives.
+void fsmPruneUnseen() {
+  for (uint8_t i = 0; i < MAX_SLOTS; i++) {
+    if (!slots[i].active) continue;
+    if (strncmp(slots[i].bookingId, "wu_", 3) == 0) continue;
+    if (slots[i].seenInSnapshot) continue;
+    Serial.printf("[FSM] Pruning stale booking %s (deleted upstream)\n",
+                  slots[i].bookingId);
+    slots[i].active = false;
+    slots[i].state  = STATE_COMPLETED;
+  }
 }
 
 void fsmCancelBooking(const char* bookingId) {

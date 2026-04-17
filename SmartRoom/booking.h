@@ -33,6 +33,7 @@ struct BookingSlot {
   bool          active;            // False = slot can be overwritten
   unsigned long pendingStartMs;    // Per-slot grace-period anchor (millis at PENDING entry)
   bool          buzzerFired;       // Per-slot 5-min warning latch
+  bool          seenInSnapshot;    // Transient flag used by fsmBeginSnapshot / fsmPruneUnseen
 };
 
 // ── Outbound event (for store-and-forward queue) ──────────────────────────────

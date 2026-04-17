@@ -1,6 +1,7 @@
 #include "mqtt_handler.h"
 #include "config.h"
 #include "event_queue.h"
+#include "fsm.h"
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
@@ -54,9 +55,14 @@ static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
 
   // Snapshot topic carries an array of bookings — split into single-object
   // chunks and dispatch each through the same parser used for /booking.
+  // Treat the snapshot as AUTHORITATIVE: mark every existing non-walk-up slot
+  // unseen, let fsmAddBooking flag the ones in the payload, then prune the
+  // rest. This self-heals after DB deletes, cascaded cancellations, or any
+  // other out-of-band change that the ESP32 didn't receive as a live message.
   if (strstr(topic, "/bookings/snapshot")) {
+    fsmBeginSnapshot();
     const char* p = strchr(buf, '[');
-    if (!p) return;
+    if (!p) { fsmPruneUnseen(); return; }
     p++;
     while (*p) {
       while (*p && *p != '{' && *p != ']') p++;
@@ -80,6 +86,7 @@ static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
         _bookingCb(obj);
       }
     }
+    fsmPruneUnseen();
     return;
   }
 
