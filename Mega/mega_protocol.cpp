@@ -222,32 +222,45 @@ void handleIncomingCommand(UTFT* lcd) {
         }
       }
 
-      uint8_t earliestHour = CAL_DAY_END_HOUR + 1;
+      // Auto-scroll target = the NEXT upcoming booking (smallest startSecs
+      // >= nowSecs). That way opening the calendar always centres on what
+      // the user actually needs to see, regardless of how many bookings
+      // are earlier/later in the week. Falls back to the earliest in-week
+      // slot when nothing is upcoming (e.g. all today's slots already
+      // passed). When there are no candidates at all, keep the current
+      // scroll position.
+      uint32_t bestUpcoming = 0xFFFFFFFFu;
+      uint32_t bestFallback = 0xFFFFFFFFu;
       for (uint8_t i = 0; i < calSlotCount; i++) {
         if (!calSlots[i].active) continue;
-        // Only consider slots within this week for auto-scroll target
+        uint32_t s = calSlots[i].startSecs;
+        // Only consider slots within this week
         if (calWeekStart > 0 && calWeekEnd > calWeekStart) {
-          if (calSlots[i].startSecs < calWeekStart || calSlots[i].startSecs > calWeekEnd) continue;
+          if (s < calWeekStart || s > calWeekEnd) continue;
         }
-        time_t st = (time_t)calSlots[i].startSecs;
-        time_t adjusted = (st > UNIX_OFFSET) ? (st - UNIX_OFFSET) : 0;
-        struct tm* tmS = localtime(&adjusted);
-        if (!tmS) {
-          Serial.print(F("[Cal] slot ")); Serial.print(i); Serial.println(F(": localtime NULL"));
-          continue;
+        if (nowSecs > 1000000000L && s >= (uint32_t)nowSecs) {
+          if (s < bestUpcoming) bestUpcoming = s;
         }
-        Serial.print(F("[Cal] slot ")); Serial.print(i);
-        Serial.print(F(" tm_wday=")); Serial.print(tmS->tm_wday);
-        Serial.print(F(" tm_hour=")); Serial.print(tmS->tm_hour);
-        Serial.print(F(" tm_min="));  Serial.println(tmS->tm_min);
-        if (tmS->tm_hour < earliestHour) earliestHour = tmS->tm_hour;
+        if (s < bestFallback) bestFallback = s;
       }
-      if (earliestHour <= CAL_DAY_END_HOUR) {
-        int maxTop = CAL_DAY_END_HOUR - CAL_VISIBLE_ROWS + 1;
-        int target = earliestHour;
-        if (target < CAL_DAY_START_HOUR) target = CAL_DAY_START_HOUR;
-        if (target > maxTop)             target = maxTop;
-        calTopHour = (uint8_t)target;
+      uint32_t target = (bestUpcoming != 0xFFFFFFFFu) ? bestUpcoming : bestFallback;
+      if (target != 0xFFFFFFFFu) {
+        time_t t = (time_t)target;
+        time_t adjusted = (t > UNIX_OFFSET) ? (t - UNIX_OFFSET) : 0;
+        struct tm* tmT = localtime(&adjusted);
+        if (tmT) {
+          int maxTop = CAL_DAY_END_HOUR - CAL_VISIBLE_ROWS + 1;
+          // Put the target booking roughly one row down from the top so the
+          // user can see a bit of lead-in time above it.
+          int want = tmT->tm_hour - 1;
+          if (want < CAL_DAY_START_HOUR) want = CAL_DAY_START_HOUR;
+          if (want > maxTop)             want = maxTop;
+          calTopHour = (uint8_t)want;
+          Serial.print(F("[Cal] auto-scroll target hour="));
+          Serial.print(tmT->tm_hour);
+          Serial.print(F(" topHour="));
+          Serial.println(calTopHour);
+        }
       }
       Serial.print(F("[Cal] drawing topHour=")); Serial.println(calTopHour);
       displayCalendarBookings(lcd, calSlots, calSlotCount, calTopHour, calWeekStart, calWeekEnd);
