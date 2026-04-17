@@ -104,8 +104,14 @@ uint8_t nvsLoadBookings(BookingSlot* slots, uint8_t maxCount) {
     }
     if (*p == '}') p++;
 
-    time_t now = time(nullptr);
-    if (s.endTime > now || now < 1000000) {
+    // Compare against Kigali wall-clock — stored endTime is backend-shifted
+    // by +7200, so the reference time must match. Refuse to restore anything
+    // until the clock is synced: a past slot resurrected pre-NTP will show
+    // as RESERVED on the LCD until the next snapshot prunes it.
+    time_t nowKigali = time(nullptr) + 7200;
+    if (nowKigali < 1000000000L) {
+      Serial.printf("[NVS] Skipped slot: clock not synced yet.\n");
+    } else if (s.endTime > nowKigali) {
       slots[loaded++] = s;
       Serial.printf("[NVS] Restored: %.36s (%s)\n", s.bookingId, s.occupantName);
     } else {

@@ -65,15 +65,10 @@ void setup() {
   buzzerInit();
 
   fsmInit();
-  {
-    // Static (BSS) instead of stack — sizeof(BookingSlot)*MAX_SLOTS is
-    // ~3.6KB and nvsLoadBookings itself already pushes a ~4KB String onto
-    // the stack, which together overflow the 8KB loopTask stack and trip
-    // the stack canary watchpoint at boot.
-    static BookingSlot saved[MAX_SLOTS];
-    uint8_t count = nvsLoadBookings(saved, MAX_SLOTS);
-    for (uint8_t i = 0; i < count; i++) fsmAddBooking(saved[i]);
-  }
+  // NVS restore deferred to loop() so it runs AFTER NTP sync — otherwise
+  // the past-booking guard in fsmAddBooking skips its "end < now" check
+  // (nowKigali is near zero) and stale weeks-old slots from flash get
+  // resurrected as SCHEDULED, making the LCD wrongly show RESERVED.
 
   mqttSetBookingCallback(onBookingMessage);
   mqttInit();
@@ -98,6 +93,17 @@ void loop() {
   if (!_startupDone && now - _startupTimeMs >= STARTUP_DELAY_MS) {
     megaSendStartup();
     _startupDone = true;
+  }
+
+  // Deferred NVS restore: runs exactly once, after NTP has synced, so the
+  // past-booking rejection in fsmAddBooking can actually evaluate end_time.
+  static bool _nvsRestored = false;
+  if (!_nvsRestored && time(nullptr) > 1000000000L) {
+    _nvsRestored = true;
+    static BookingSlot saved[MAX_SLOTS];
+    uint8_t count = nvsLoadBookings(saved, MAX_SLOTS);
+    for (uint8_t i = 0; i < count; i++) fsmAddBooking(saved[i]);
+    updateLED();
   }
 
   // FIX: Non-blocking confirmation clear.
