@@ -155,12 +155,6 @@ void displayStatusScreen(UTFT* lcd, RoomDisplayData* d) {
       lcdPrint(lcd, "Tap to reserve this room", 20, 320);
     }
 
-    bool avail2 = (d->state == STATE_GHOST || d->state == STATE_COMPLETED);
-    lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
-    lcdPrint(lcd, "LED indicator:", 430, 100);
-    if (avail2) { lcd->setColor(COL_GREEN); lcdPrint(lcd, "GREEN  (available)", 430, 118); }
-    else        { lcd->setColor(COL_RED);   lcdPrint(lcd, "RED  (occupied)",    430, 118); }
-
     memcpy(&_prevData, d, sizeof(RoomDisplayData));
   }
 
@@ -299,43 +293,11 @@ void displayCalendarScreen(UTFT* lcd, uint8_t topHour, uint32_t weekStart, uint3
   lcd->setBackColor(COL_BG);
   drawPanel(lcd, 0, 0, SCR_W, 60, COL_NAVY);
   lcd->setColor(COL_WHITE); lcd->setBackColor(COL_NAVY);
-  lcd->setFont(BigFont);
-
-  // Show "DD Mon – DD Mon" range if weekStart is valid, else "This Week"
-  if (weekStart > 0) {
-    static const char* MON_ABR[12] = {"Jan","Feb","Mar","Apr","May","Jun",
-                                       "Jul","Aug","Sep","Oct","Nov","Dec"};
-    time_t ws = (time_t)weekStart;
-    time_t we = (time_t)weekEnd;
-    ws = (ws > UNIX_OFFSET) ? (ws - UNIX_OFFSET) : 0;
-    we = (we > UNIX_OFFSET) ? (we - UNIX_OFFSET) : 0;
-    // localtime() returns a pointer to a SINGLE static buffer — a second
-    // call overwrites the first result. Copy the first decoded tm out
-    // before asking for the second, otherwise both ends read as the end
-    // date and the header renders as "19 Apr - 19 Apr".
-    struct tm startTm;
-    struct tm* tms = localtime(&ws);
-    char hdr[40];
-    if (tms) {
-      startTm = *tms;
-      struct tm* tme = localtime(&we);
-      if (tme) {
-        snprintf(hdr, sizeof(hdr), "%d %s - %d %s",
-                 startTm.tm_mday, MON_ABR[startTm.tm_mon],
-                 tme->tm_mday,    MON_ABR[tme->tm_mon]);
-      } else {
-        strcpy(hdr, "This Week");
-      }
-    } else {
-      strcpy(hdr, "This Week");
-    }
-    lcdPrint(lcd, hdr, 20, 15);
-  } else {
-    lcdPrint(lcd, "This Week", 20, 15);
-  }
-
   lcd->setFont(SmallFont); lcd->setColor(COL_GRAY);
   lcdPrint(lcd, "Swipe right to go back", 500, 38);
+
+  (void)weekStart;
+  (void)weekEnd;
 
   char days[7][4] = {"Mon","Tue","Wed","Thu","Fri","Sat","Sun"};
   int colW = SCR_W / 7;
