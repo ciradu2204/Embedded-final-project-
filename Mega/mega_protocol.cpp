@@ -111,6 +111,9 @@ void handleIncomingCommand(UTFT* lcd) {
   char cmd[16] = {0};
   if (!extractStr(buf, "cmd", cmd, sizeof(cmd))) return;
 
+  // DIAGNOSTIC (remove after flicker investigation):
+  Serial.print(F("[Cmd] ")); Serial.println(cmd);
+
   if (strcmp(cmd, "STATUS") == 0) {
     if (currentScreen != 0) return;   // Ignore on sub-screens
     extractStr(buf, "room",  currentData.roomName,     sizeof(currentData.roomName));

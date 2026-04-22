@@ -105,6 +105,13 @@ void displayStatusScreen(UTFT* lcd, RoomDisplayData* d) {
                       (strcmp(d->upcomingEnd,      _prevData.upcomingEnd)      != 0) ||
                       (strcmp(d->upcomingDate,     _prevData.upcomingDate)     != 0);
 
+  // DIAGNOSTIC (remove after flicker investigation):
+  if (stateChanged) {
+    Serial.print(F("[Status] REDRAW state=")); Serial.print(d->state);
+    Serial.print(F(" occ=")); Serial.print(d->occupantName);
+    Serial.print(F(" uOcc=")); Serial.println(d->upcomingOccupant);
+  }
+
   if (stateChanged) {
     _firstDraw   = false;
     // Reset secondary trackers so the fresh screen gets its first countdown
