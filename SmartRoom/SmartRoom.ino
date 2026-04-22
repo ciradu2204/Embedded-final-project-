@@ -18,7 +18,6 @@
 static unsigned long _lastFsmTickMs     = 0;
 static unsigned long _lastDisplaySyncMs = 0;
 static unsigned long _lastNvsSaveMs     = 0;
-static unsigned long _lastOfflineBlipMs = 0;
 // FIX: Non-blocking confirmation timer replaces blocking delay(3200)
 static unsigned long _confirmClearMs    = 0;
 static bool          _confirmPending    = false;
@@ -52,7 +51,6 @@ static const uint32_t FSM_TICK_INTERVAL_MS     = 1000;
 static const uint32_t DISPLAY_SYNC_INTERVAL_MS = 1000;
 static const uint32_t NVS_SAVE_INTERVAL_MS     = 30000;
 static const uint32_t CONFIRM_SHOW_MS          = 3000;
-static const uint32_t OFFLINE_BLIP_INTERVAL_MS  = 2000;  // Blip every 2s when offline
 
 static const char WALK_UP_NAME[] = "Walk-up booking";
 
@@ -197,15 +195,9 @@ void loop() {
     uint8_t remote = megaGetRemoteScreen();
     if (remote == 0 && !_confirmPending) {
       syncDisplay();
-      bool offline = !mqttConnected();
-      megaSendOfflineWarning(offline);
-      // Throttled offline blip — one quiet 40ms blip every 2 seconds when disconnected.
-      // Much less annoying than the previous continuous tone caused by the blocking
-      // WiFi reconnect loop preventing buzzerTick() from running.
-      if (offline && now - _lastOfflineBlipMs >= OFFLINE_BLIP_INTERVAL_MS) {
-        _lastOfflineBlipMs = now;
-        buzzerOfflineBlip();
-      }
+      megaSendOfflineWarning(!mqttConnected());
+      // Offline status is shown on-screen only — no buzzer blip. The 5-min
+      // session-end warning is the only buzzer event in normal operation.
     } else if (remote == 1) {
       // Calendar screen open: refresh booking data so newly arrived snapshots
       // appear without the user having to leave and re-open the calendar.
