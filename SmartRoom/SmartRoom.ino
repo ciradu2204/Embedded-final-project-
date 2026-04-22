@@ -139,6 +139,7 @@ void loop() {
   if (_confirmPending && now - _confirmClearMs >= CONFIRM_SHOW_MS) {
     _confirmPending = false;
     megaSetRemoteScreen(0);
+    forceNextStatusSend();
     syncDisplay();
   }
 
@@ -174,6 +175,7 @@ void loop() {
     } else if (strcmp(touch.gesture, "R") == 0
             || strcmp(touch.gesture, "CANCEL") == 0) {
       megaSetRemoteScreen(0);
+      forceNextStatusSend();   // Mega just reset its cache on CANCEL
       syncDisplay();
     }
   }
@@ -319,6 +321,18 @@ static uint32_t fsmCountdownSecs() {
   return (uint32_t)(s->endTime - now);
 }
 
+// FNV-1a of a null-terminated string.
+static uint32_t fnvStr(uint32_t h, const char* s) {
+  while (*s) { h ^= (uint8_t)*s++; h *= 16777619u; }
+  return h;
+}
+
+// Forces syncDisplay() to send on its next call regardless of hash match.
+// Needed after leaving a sub-screen because the Mega resets its status-
+// screen cache and expects a fresh STATUS to rebuild the display.
+static bool _forceStatusSend = false;
+static void forceNextStatusSend() { _forceStatusSend = true; }
+
 static void syncDisplay() {
   FSMState     state = fsmGetCurrentState();
   BookingSlot* slot  = fsmGetActiveSlot();
@@ -353,6 +367,32 @@ static void syncDisplay() {
                DOW[tmU->tm_wday], tmU->tm_mday, MON_ABR[tmU->tm_mon]);
     }
   }
+
+  // Suppress STATUS resends when nothing visible has changed. Every
+  // redundant send was a fresh chance for the Mega's 64-byte ring to
+  // overflow during LCD work and concatenate two packets — the root
+  // cause of the no-booking flicker. Countdown-tick (secs/mins) is
+  // deliberately excluded so the Mega's layer-2 gate handles it. The
+  // Mega's layer-1 change-gate also deduplicates, but not sending at
+  // all is strictly better for UART reliability.
+  static uint32_t lastStatusHash = 0;
+  static bool     lastStatusValid = false;
+  uint32_t h = 2166136261u;
+  h ^= (uint32_t)state; h *= 16777619u;
+  h = fnvStr(h, occupant);
+  h = fnvStr(h, title);
+  h = fnvStr(h, startStr);
+  h = fnvStr(h, endStr);
+  h = fnvStr(h, upOcc);
+  h = fnvStr(h, upTitle);
+  h = fnvStr(h, upStart);
+  h = fnvStr(h, upEnd);
+  h = fnvStr(h, upDate);
+  if (lastStatusValid && h == lastStatusHash && !_forceStatusSend) return;
+  _forceStatusSend = false;
+  lastStatusHash   = h;
+  lastStatusValid  = true;
+
   megaSendStatus(ROOM_NAME, (uint8_t)state, occupant, title, startStr, endStr,
                  mins, secs, upOcc, upTitle, upStart, upEnd, upDate);
 }
