@@ -109,8 +109,11 @@ static void reportScreen(uint8_t screen) {
 
 // ── Command handler ───────────────────────────────────────────────────────────
 void handleIncomingCommand(UTFT* lcd) {
-  char buf[600];
-  // FIX: Non-blocking — returns false immediately if no complete line available
+  // Static (BSS) not stack — combined with _rxBuf[600] this is 1.2 KB that
+  // was tripping the Mega 2560's 8 KB SRAM on the stack and causing it to
+  // reboot mid-receive. The reboots produced mid-stream partial parses
+  // that then scraped JSON fragments into the 'title' field.
+  static char buf[600];
   if (!readLine(buf, sizeof(buf))) return;
 
   char cmd[16] = {0};
