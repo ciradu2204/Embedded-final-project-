@@ -43,9 +43,14 @@ static void scrollCalendar(UTFT* lcd, int delta) {
 }
 
 // ── Non-blocking character-by-character UART reader ──────────────────────────
-// FIX: Replaces readStringUntil() which blocks for 1 second on incomplete packets.
-static char    _rxBuf[300];
-static uint8_t _rxPos = 0;
+// Must fit the longest inbound packet. STATUS packs up to ~560 bytes on the
+// ESP32 (mega_comm.cpp: char buf[560]). Undersizing this caused STATUS JSON
+// to be silently truncated mid-value — extractStr then scanned past the
+// terminator and scraped JSON fragments into 'title', so the change-gate
+// in displayStatusScreen flagged a change on every tick and the LCD
+// flickered continuously. _rxPos widened to uint16_t for the same reason.
+static char     _rxBuf[600];
+static uint16_t _rxPos = 0;
 
 static bool readLine(char* outBuf, uint16_t maxLen) {
   while (Serial2.available()) {
@@ -104,7 +109,7 @@ static void reportScreen(uint8_t screen) {
 
 // ── Command handler ───────────────────────────────────────────────────────────
 void handleIncomingCommand(UTFT* lcd) {
-  char buf[300];
+  char buf[600];
   // FIX: Non-blocking — returns false immediately if no complete line available
   if (!readLine(buf, sizeof(buf))) return;
 
