@@ -120,7 +120,13 @@ void handleIncomingCommand(UTFT* lcd) {
   if (!extractStr(buf, "cmd", cmd, sizeof(cmd))) return;
 
   // DIAGNOSTIC (remove after flicker investigation):
-  Serial.print(F("[Cmd] ")); Serial.println(cmd);
+  Serial.print(F("[Cmd] ")); Serial.print(cmd);
+  Serial.print(F(" len=")); Serial.print(strlen(buf));
+  // Only dump the raw buffer for STATUS (that's where the garbage is appearing)
+  if (strcmp(cmd, "STATUS") == 0) {
+    Serial.print(F(" RAW=<")); Serial.print(buf); Serial.print(F(">"));
+  }
+  Serial.println();
 
   if (strcmp(cmd, "STATUS") == 0) {
     if (currentScreen != 0) return;   // Ignore on sub-screens
