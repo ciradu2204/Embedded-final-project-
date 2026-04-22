@@ -107,9 +107,53 @@ void displayStatusScreen(UTFT* lcd, RoomDisplayData* d) {
 
   // DIAGNOSTIC (remove after flicker investigation):
   if (stateChanged) {
-    Serial.print(F("[Status] REDRAW state=")); Serial.print(d->state);
-    Serial.print(F(" occ=")); Serial.print(d->occupantName);
-    Serial.print(F(" uOcc=")); Serial.println(d->upcomingOccupant);
+    Serial.print(F("[Status] CHANGED: "));
+    if (_firstDraw) Serial.print(F("firstDraw "));
+    if (d->state != _prevData.state) {
+      Serial.print(F("state ")); Serial.print(_prevData.state);
+      Serial.print(F("->")); Serial.print(d->state); Serial.print(F(" "));
+    }
+    if (strcmp(d->roomName, _prevData.roomName) != 0) {
+      Serial.print(F("room['")); Serial.print(_prevData.roomName);
+      Serial.print(F("'->'")); Serial.print(d->roomName); Serial.print(F("'] "));
+    }
+    if (strcmp(d->occupantName, _prevData.occupantName) != 0) {
+      Serial.print(F("occ['")); Serial.print(_prevData.occupantName);
+      Serial.print(F("'->'")); Serial.print(d->occupantName); Serial.print(F("'] "));
+    }
+    if (strcmp(d->title, _prevData.title) != 0) {
+      Serial.print(F("title['")); Serial.print(_prevData.title);
+      Serial.print(F("'->'")); Serial.print(d->title); Serial.print(F("'] "));
+    }
+    if (strcmp(d->startTime, _prevData.startTime) != 0) {
+      Serial.print(F("start['")); Serial.print(_prevData.startTime);
+      Serial.print(F("'->'")); Serial.print(d->startTime); Serial.print(F("'] "));
+    }
+    if (strcmp(d->endTime, _prevData.endTime) != 0) {
+      Serial.print(F("end['")); Serial.print(_prevData.endTime);
+      Serial.print(F("'->'")); Serial.print(d->endTime); Serial.print(F("'] "));
+    }
+    if (strcmp(d->upcomingOccupant, _prevData.upcomingOccupant) != 0) {
+      Serial.print(F("uOcc['")); Serial.print(_prevData.upcomingOccupant);
+      Serial.print(F("'->'")); Serial.print(d->upcomingOccupant); Serial.print(F("'] "));
+    }
+    if (strcmp(d->upcomingTitle, _prevData.upcomingTitle) != 0) {
+      Serial.print(F("uTitle['")); Serial.print(_prevData.upcomingTitle);
+      Serial.print(F("'->'")); Serial.print(d->upcomingTitle); Serial.print(F("'] "));
+    }
+    if (strcmp(d->upcomingStart, _prevData.upcomingStart) != 0) {
+      Serial.print(F("uStart['")); Serial.print(_prevData.upcomingStart);
+      Serial.print(F("'->'")); Serial.print(d->upcomingStart); Serial.print(F("'] "));
+    }
+    if (strcmp(d->upcomingEnd, _prevData.upcomingEnd) != 0) {
+      Serial.print(F("uEnd['")); Serial.print(_prevData.upcomingEnd);
+      Serial.print(F("'->'")); Serial.print(d->upcomingEnd); Serial.print(F("'] "));
+    }
+    if (strcmp(d->upcomingDate, _prevData.upcomingDate) != 0) {
+      Serial.print(F("uDate['")); Serial.print(_prevData.upcomingDate);
+      Serial.print(F("'->'")); Serial.print(d->upcomingDate); Serial.print(F("'] "));
+    }
+    Serial.println();
   }
 
   if (stateChanged) {
