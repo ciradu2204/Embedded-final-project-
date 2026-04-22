@@ -114,7 +114,21 @@ void megaSendStatus(const char* roomName, uint8_t state,
            upcomingStart    ? upcomingStart    : "",
            upcomingEnd      ? upcomingEnd      : "",
            upcomingDate     ? upcomingDate     : "");
-  MegaSerial.print(buf);
+  // Byte-pace the send: Mega's default HardwareSerial RX ring is 64 bytes
+  // and a STATUS packet can be 150-300 bytes. Writing it in one shot
+  // overflows the ring, dropping bytes — notably the terminating '\n', so
+  // the next STATUS gets concatenated onto the truncated one. The Mega
+  // parser then sees one combined line and extractStr scrapes the second
+  // packet's '{' into the 'title' field, which is exactly the flicker bug.
+  // Splitting into 48-byte chunks with a 6 ms gap gives the Mega time to
+  // drain the ring between chunks.
+  uint16_t len = strlen(buf);
+  const uint16_t CHUNK = 48;
+  for (uint16_t off = 0; off < len; off += CHUNK) {
+    uint16_t n = (len - off > CHUNK) ? CHUNK : (len - off);
+    MegaSerial.write((const uint8_t*)(buf + off), n);
+    delay(6);
+  }
 }
 
 // Send calendar booking data to Mega for display on calendar screen.
