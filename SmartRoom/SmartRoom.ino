@@ -120,6 +120,10 @@ void loop() {
   if (!_startupDone && now - _startupTimeMs >= STARTUP_DELAY_MS) {
     megaSendStartup();
     _startupDone = true;
+    // STARTUP resets the Mega's status-screen cache — force the next
+    // syncDisplay to push a fresh STATUS so the screen leaves the
+    // "Initialising..." splash instead of staying stuck.
+    forceNextStatusSend();
   }
 
   // Deferred NVS restore: runs exactly once, after NTP has synced, so the
