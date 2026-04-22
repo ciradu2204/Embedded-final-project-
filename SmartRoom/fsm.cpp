@@ -2,6 +2,7 @@
 #include "config.h"
 #include "event_queue.h"
 #include <Arduino.h>
+#include <esp_system.h>
 #include <time.h>
 
 static BookingSlot slots[MAX_SLOTS];
@@ -10,6 +11,21 @@ static uint8_t slotCount = 0;
 static void transitionTo(BookingSlot* slot, FSMState newState);
 static BookingSlot* findSlot(const char* bookingId);
 static BookingSlot* findFreeSlot();
+
+// Emit a RFC 4122 v4 UUID so walk-ups created on the panel share the exact
+// same id as the row the backend persists. Without a shared id the device and
+// DB track two separate slots for the same booking, and dashboard cancels
+// never reach the LCD.
+static void generateUuidV4(char* out, size_t outSize) {
+  uint8_t b[16];
+  for (int i = 0; i < 16; i++) b[i] = esp_random() & 0xFF;
+  b[6] = (b[6] & 0x0F) | 0x40;
+  b[8] = (b[8] & 0x3F) | 0x80;
+  snprintf(out, outSize,
+    "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+    b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+    b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
+}
 
 void fsmInit() {
   memset(slots, 0, sizeof(slots));
@@ -65,14 +81,12 @@ void fsmBeginSnapshot() {
   }
 }
 
-// Drop any slot the backend no longer reports. Walk-ups (id prefix "wu_")
-// are skipped because the backend may not have echoed them back yet; their
-// eventual replacement via the server-assigned UUID is handled by the
-// normal fsmAddBooking path when the next snapshot arrives.
+// Drop any slot the backend no longer reports. Walk-ups now share the same
+// UUID as the DB row (see generateUuidV4), so the snapshot is authoritative
+// for them too — no special-case pruning skip needed.
 void fsmPruneUnseen() {
   for (uint8_t i = 0; i < MAX_SLOTS; i++) {
     if (!slots[i].active) continue;
-    if (strncmp(slots[i].bookingId, "wu_", 3) == 0) continue;
     if (slots[i].seenInSnapshot) continue;
     slots[i].active = false;
     slots[i].state  = STATE_COMPLETED;
@@ -207,7 +221,7 @@ bool fsmCreateWalkUpBooking(const char* occupantName, uint16_t durationMins, con
   BookingSlot* slot = findFreeSlot();
   if (!slot) { Serial.println(F("[FSM] No free slot for walk-up.")); return false; }
   memset(slot, 0, sizeof(*slot));
-  snprintf(slot->bookingId, sizeof(slot->bookingId), "wu_%lu", (unsigned long)now);
+  generateUuidV4(slot->bookingId, sizeof(slot->bookingId));
   strlcpy(slot->occupantName, occupantName, sizeof(slot->occupantName));
   strlcpy(slot->title, title ? title : "", sizeof(slot->title));
   slot->startTime      = now;
