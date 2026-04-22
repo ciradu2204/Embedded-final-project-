@@ -502,8 +502,8 @@ static void drawChip(UTFT* lcd, int x, int y, int w, int h,
   lcd->setBackColor(COL_BG);
 }
 
-static const char* const BOOK_DURATIONS[4] = {"1 min", "15 min", "30 min", "60 min"};
-static const int BOOK_DURATION_MINS[4]     = {1, 15, 30, 60};
+static const char* const BOOK_DURATIONS[4] = {"2 min", "15 min", "30 min", "60 min"};
+static const int BOOK_DURATION_MINS[4]     = {2, 15, 30, 60};
 static const char* const BOOK_PURPOSES[5]  = {"Meeting", "Class", "Study", "Event", "Other"};
 
 static int8_t _selectedDurIdx     = -1;
