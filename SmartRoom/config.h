@@ -38,7 +38,7 @@
 #define UART_MEGA_BAUD  115200
 
 // ── FSM timing ────────────────────────────────────────────────────────
-#define GRACE_PERIOD_MS    (10UL * 60 * 1000)
+#define GRACE_PERIOD_MS    (1UL * 60 * 1000)
 #define BUZZER_WARNING_MS  ( 5UL * 60 * 1000)
 #define PIR_DEBOUNCE_MS    3000
 
