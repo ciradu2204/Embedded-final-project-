@@ -38,21 +38,28 @@ void setup() {
 }
 
 void loop() {
-  // 1. Drain every complete line currently in the Serial2 RX ring before
+  // Drain every complete line currently in the Serial2 RX ring before
   // touching touch. Mega's default HardwareSerial ring is only 64 bytes —
-  // a CALSLOT (~90B) + CALDONE (~22B) burst overflows it if we only
-  // process one line per loop(), so calendar data was being truncated and
-  // CALDONE lost entirely. handleIncomingCommand() already returns early
-  // when no complete line is buffered, so this loop is bounded by the
-  // number of completed lines present right now.
+  // a STATUS (~170B) or CALSLOT (~90B) burst overflows it if the loop
+  // takes more than ~5.5 ms between drains. At 115200 baud the ring fills
+  // in roughly 5 ms, so touch/I2C work must not go longer than that.
   while (Serial2.available()) {
     handleIncomingCommand(&myGLCD);
   }
 
-  // 2. Poll touch panel and forward any touch events to ESP32
+  // Poll touch panel and forward any touch events to ESP32. Wrapped with
+  // a pre-check on Serial2 so an inbound packet in flight gets drained
+  // before we spend I2C time reading the touch controller.
+  if (Serial2.available() > 0) {
+    while (Serial2.available()) handleIncomingCommand(&myGLCD);
+  }
   TouchPoint tp = touchRead();
 
-  // VITAL FIX: No "if (tp.touched)" here!
-  // It must run every loop so the protocol knows when you LIFT your finger.
+  // Drain again after touch read — I2C read takes ~1-3 ms and more bytes
+  // may have arrived while we were talking to the touch IC.
+  while (Serial2.available()) handleIncomingCommand(&myGLCD);
+
+  // Run every loop (not gated on tp.touched) so finger-lift is always
+  // detected even if we missed the "down" poll due to a Serial drain.
   sendTouchEvent(tp);
 }
