@@ -372,30 +372,15 @@ static void syncDisplay() {
     }
   }
 
-  // Suppress STATUS resends when nothing visible has changed. Every
-  // redundant send was a fresh chance for the Mega's 64-byte ring to
-  // overflow during LCD work and concatenate two packets — the root
-  // cause of the no-booking flicker. Countdown-tick (secs/mins) is
-  // deliberately excluded so the Mega's layer-2 gate handles it. The
-  // Mega's layer-1 change-gate also deduplicates, but not sending at
-  // all is strictly better for UART reliability.
-  static uint32_t lastStatusHash = 0;
-  static bool     lastStatusValid = false;
-  uint32_t h = 2166136261u;
-  h ^= (uint32_t)state; h *= 16777619u;
-  h = fnvStr(h, occupant);
-  h = fnvStr(h, title);
-  h = fnvStr(h, startStr);
-  h = fnvStr(h, endStr);
-  h = fnvStr(h, upOcc);
-  h = fnvStr(h, upTitle);
-  h = fnvStr(h, upStart);
-  h = fnvStr(h, upEnd);
-  h = fnvStr(h, upDate);
-  if (lastStatusValid && h == lastStatusHash && !_forceStatusSend) return;
-  _forceStatusSend = false;
-  lastStatusHash   = h;
-  lastStatusValid  = true;
+  // Always send STATUS. Earlier attempt to suppress redundant sends via
+  // an FNV hash broke two cases: (1) the countdown timer freezes because
+  // `secs` is excluded from the hash on purpose (would match every tick),
+  // and (2) a STATUS corrupted in the UART ring during a state transition
+  // leaves the Mega stuck on the stale state with no retransmit coming —
+  // the user sees "UNKNOWN" + BOOK NOW and has to swipe away and back to
+  // force a resend. Ring overflow is handled by byte-pacing the send and
+  // interleaving Serial drain with touch I2C, which is the real fix.
+  _forceStatusSend = false;  // kept for compatibility with existing callers
 
   megaSendStatus(ROOM_NAME, (uint8_t)state, occupant, title, startStr, endStr,
                  mins, secs, upOcc, upTitle, upStart, upEnd, upDate);
